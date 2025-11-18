@@ -736,8 +736,9 @@
       Load Supabase Client and App JS.
       supabase-client.js must load first.
     -->
-    <script src="supabase-client.js"></script>
-    <!-- Renamed from script.js -->
-    <script src="app.js"></script> 
+    <!-- FIX: Added type="module" to support import/export -->
+    <script type="module" src="supabase-client.js"></script>
+    <!-- FIX: Added type="module" to support import/export -->
+    <script type="module" src="app.js"></script> 
 </body>
 </html>
