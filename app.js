@@ -1,18 +1,13 @@
 // =========================================
 // 1. IMPORTS & SETUP
 // =========================================
-//
-// FINAL FIX: Changing back to a named import (with curly braces).
-// This error "...does not provide an export named 'default'" means
-// your file uses `export const supabase`, not `export default`.
-//
 import { supabase } from './supabase-client.js';
 
 // =========================================
 // 2. APPLICATION STATE
 // =========================================
 let state = {
-    currentUser: null, // Will be populated from 'users' table
+    currentUser: null, 
     userImpact: { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 },
     leaderboard: [],
     history: [],
@@ -20,14 +15,13 @@ let state = {
     events: [],
     stores: [],
     products: [],
-    userRewards: [], // This will be a flattened list of order_items
-    checkInReward: 10, // Business logic, can stay static
+    userRewards: [], 
+    checkInReward: 10, 
     levels: [
         { level: 1, title: 'Green Starter', minPoints: 0, nextMin: 1001 },
         { level: 2, title: 'Eco Learner', minPoints: 1001, nextMin: 2001 },
         { level: 3, title: 'Sustainability Leader', minPoints: 2001, nextMin: 4001 },
     ],
-    // Store the raw Supabase auth user
     currentAuthUser: null 
 };
 
@@ -85,22 +79,16 @@ const els = {
 // 4. AUTHENTICATION & INITIALIZATION
 // =========================================
 
-// Listen for authentication changes
-// This line should now work with the corrected import
 supabase.auth.onAuthStateChange(async (event, session) => {
     if (session) {
         state.currentAuthUser = session.user;
-        // User is signed in, fetch all app data
         await initializeApp(session.user);
     } else {
-        // User is not signed in, redirect to login page
+        // Hide loader if we redirect, though page usually reloads
         window.location.href = 'login.html';
     }
 });
 
-/**
- * Main function to fetch all data from Supabase after login.
- */
 async function initializeApp(authUser) {
     try {
         console.log("Initializing app for user:", authUser.id);
@@ -112,9 +100,9 @@ async function initializeApp(authUser) {
             .eq('auth_user_id', authUser.id)
             .single();
 
+        // FIX: Ensure fallback object has ALL required fields to prevent crashes
         if (profileError || !userProfile) {
             console.warn('User profile missing, using fallback.');
-
             state.currentUser = {
                 id: authUser.id,
                 full_name: authUser.email?.split('@')[0] || "User",
@@ -122,7 +110,11 @@ async function initializeApp(authUser) {
                 lifetime_points: 0,
                 profile_img_url: null,
                 checkInStreak: 0,
-                isCheckedInToday: false
+                isCheckedInToday: false,
+                joined_at: new Date().toISOString(), // CRITICAL FIX: Prevents Date error
+                student_id: 'N/A',
+                course: 'N/A',
+                mobile: 'N/A'
             };
         } else {
             state.currentUser = {
@@ -134,7 +126,7 @@ async function initializeApp(authUser) {
 
         const today = new Date().toISOString().split("T")[0];
 
-        // --- Safe Parallel Fetch for all app data ---
+        // --- Safe Parallel Fetch ---
         const [
             leaderboardRes,
             historyRes,
@@ -163,11 +155,10 @@ async function initializeApp(authUser) {
             supabase.from('user_impact').select('*').eq('user_id', state.currentUser.id).single()
         ]);
 
-        // --- Helper for safe access ---
         const safeData = (res, fallback = []) =>
             (res && res.status === "fulfilled" && res.value && res.value.data) ? res.value.data : fallback;
 
-        // --- Assign Safe State Values ---
+        // --- Assign State ---
         state.leaderboard = safeData(leaderboardRes, []).map(u => ({
             ...u,
             name: u.full_name,
@@ -178,6 +169,7 @@ async function initializeApp(authUser) {
         }));
 
         state.history = safeData(historyRes, []).map(mapHistory);
+        
         const userSubmissions = safeData(challengeSubmissionsRes, []).reduce((acc, s) => { acc[s.challenge_id] = s.status; return acc; }, {});
         state.dailyChallenges = safeData(challengesRes, []).map(c => mapChallenge(c, userSubmissions));
 
@@ -203,48 +195,45 @@ async function initializeApp(authUser) {
             });
         });
 
-        state.currentUser.checkInStreak = (streakRes?.value?.data?.current_streak) ?? 0;
-        state.currentUser.isCheckedInToday = (checkinRes?.value?.data?.length > 0) ?? false;
-        state.userImpact = impactRes?.value?.data ?? { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
+        // Handle potentially missing single records
+        state.currentUser.checkInStreak = (streakRes?.status === 'fulfilled' && streakRes.value.data?.current_streak) || 0;
+        state.currentUser.isCheckedInToday = (checkinRes?.status === 'fulfilled' && checkinRes.value.data?.length > 0) || false;
+        state.userImpact = (impactRes?.status === 'fulfilled' && impactRes.value.data) ? impactRes.value.data : { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
 
         // --- Render UI ---
         setupEventListeners();
         renderAllUI();
 
         // --- Hide Loader ---
-        els.appLoader.classList.add("loaded");
+        // Small delay to ensure DOM paint
+        setTimeout(() => {
+            els.appLoader.classList.add("loaded");
+        }, 500);
+
         console.log("App initialized safely.");
 
     } catch (error) {
         console.error("Fatal app error:", error);
-        els.appLoader.innerHTML = `<p class="text-red-500 p-4">Error loading app. Please refresh.</p>`;
+        els.appLoader.innerHTML = `<p class="text-red-500 p-4 text-center">Error loading app.<br>${error.message}</p>`;
     }
 }
 
-
-/**
- * Renders all dynamic UI components.
- */
 function renderAllUI() {
     renderDashboard();
     renderProfile();
-    // Default to student leaderboard
     showLeaderboardTab('student'); 
-    // Other pages will be rendered when navigated to
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 // =========================================
 // 5. DATA MAPPING HELPERS
 // =========================================
 
-const getTodayDateString = () => new Date().toISOString().split('T')[0];
-
 const mapHistory = (h) => ({
     type: h.source_type,
     description: h.description,
     points: h.points_delta,
-    date: new Date(h.created_at).toLocaleDateString('en-CA'), // YYYY-MM-DD
+    date: new Date(h.created_at).toLocaleDateString('en-CA'), 
     icon: {
         'event': 'calendar-check',
         'order': 'shopping-cart',
@@ -272,7 +261,6 @@ const mapChallenge = (c, submissions) => {
     } else if (userStatus === 'rejected') {
         status = 'rejected';
         buttonText = 'Try Again';
-        // allow retry
     }
 
     return {
@@ -280,12 +268,7 @@ const mapChallenge = (c, submissions) => {
         title: c.title,
         description: c.description,
         points_reward: c.points_reward,
-        icon: {
-            'upload': 'camera',
-            'quiz': 'brain',
-            'photo': 'eye',
-            'link': 'link'
-        }[c.type] || 'award',
+        icon: { 'upload': 'camera', 'quiz': 'brain', 'photo': 'eye', 'link': 'link' }[c.type] || 'award',
         status: status,
         buttonText: buttonText,
         type: c.type,
@@ -299,15 +282,10 @@ const mapEvent = (e, attendance) => {
     const now = new Date();
     const eventEnd = e.end_at ? new Date(e.end_at) : new Date(e.start_at);
 
-    if (userStatus === 'confirmed') {
-        status = 'attended';
-    } else if (userStatus === 'registered') {
-        status = 'registered';
-    } else if (userStatus === 'absent') {
-        status = 'missed';
-    } else if (now > eventEnd) {
-        status = 'missed'; // Default to missed if event is over and user didn't attend
-    }
+    if (userStatus === 'confirmed') status = 'attended';
+    else if (userStatus === 'registered') status = 'registered';
+    else if (userStatus === 'absent') status = 'missed';
+    else if (now > eventEnd) status = 'missed';
 
     return {
         id: e.id,
@@ -331,16 +309,12 @@ const mapProduct = (p) => ({
     discountedPrice: p.discounted_price,
     cost: p.ecopoints_cost,
     popularity: p.metadata?.popularity || 0,
-    instructions: p.metadata?.instructions || 'Show QR code at counter.'
 });
 
 // =========================================
 // 6. CORE APP HELPERS
 // =========================================
 
-/**
- * Gets the user's current level and progress.
- */
 const getUserLevel = (points) => {
     let current = state.levels[0];
     for (let i = state.levels.length - 1; i >= 0; i--) {
@@ -361,9 +335,6 @@ const getUserLevel = (points) => {
     return { ...current, progress, progressText };
 };
 
-/**
- * Combines products with their store info.
- */
 const getAllProducts = () => {
     return state.products.map(p => {
         const store = state.stores.find(s => s.id === p.storeId);
@@ -375,52 +346,27 @@ const getAllProducts = () => {
     });
 };
 
-/**
- * Gets a single product and its store by Product ID.
- */
 const getProduct = (productId) => {
     const product = state.products.find(p => p.productId === productId);
     if (!product) return { store: null, product: null };
-    
     const store = state.stores.find(s => s.id === product.storeId);
     return { store, product: {...product, storeName: store.name, storeLogo: store.logo_url } };
 };
 
-/**
- * Animates the points display in the header and sidebar.
- */
 const animatePointsUpdate = (newPoints) => {
     state.currentUser.current_points = newPoints;
-    
-    // Header
     els.userPointsHeader.classList.add('points-pulse');
     els.userPointsHeader.textContent = newPoints;
     setTimeout(() => els.userPointsHeader.classList.remove('points-pulse'), 400);
-
-    // Sidebar
     els.sidebarPoints.textContent = newPoints;
-
-    // Ecopoints page
-    const ecopointsBalance = document.getElementById('ecopoints-balance');
-    if (ecopointsBalance) {
-        ecopointsBalance.textContent = newPoints;
-    }
+    if(document.getElementById('ecopoints-balance')) document.getElementById('ecopoints-balance').textContent = newPoints;
 };
 
-/**
- * Re-fetches the user's points and updates the UI.
- */
 async function refreshUserPoints() {
-    const { data, error } = await supabase
-        .from('users')
-        .select('current_points, lifetime_points')
-        .eq('id', state.currentUser.id)
-        .single();
-    
+    const { data } = await supabase.from('users').select('current_points, lifetime_points').eq('id', state.currentUser.id).single();
     if (data) {
         animatePointsUpdate(data.current_points);
         state.currentUser.lifetime_points = data.lifetime_points;
-        // Re-render components that depend on lifetime points
         renderProfile();
     }
 }
@@ -429,14 +375,11 @@ async function refreshUserPoints() {
 // 7. NAVIGATION & UI
 // =========================================
 
-// Make functions globally accessible for inline onclicks
 window.showPage = (pageId) => {
     els.pages.forEach(p => p.classList.remove('active'));
-    
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
-    // Clear detail pages when navigating away
     if (pageId !== 'store-detail-page' && pageId !== 'product-detail-page') {
         els.storeDetailPage.innerHTML = '';
         els.productDetailPage.innerHTML = '';
@@ -449,60 +392,35 @@ window.showPage = (pageId) => {
 
     document.querySelector('.main-content').scrollTop = 0;
 
-    // Lazy load page content
     switch (pageId) {
-        case 'dashboard':
-            renderDashboard();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'leaderboard':
-            showLeaderboardTab(currentLeaderboardTab); // Renders leaderboard
-            break;
-        case 'rewards':
-            renderRewards();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'my-rewards':
-            renderMyRewardsPage();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'history':
-            renderHistory();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'ecopoints':
-            renderEcoPointsPage();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'challenges':
-            renderChallengesPage();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'events':
-            renderEventsPage();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        case 'profile':
-            renderProfile();
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-            break;
-        default:
-            if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        case 'dashboard': renderDashboard(); break;
+        case 'leaderboard': showLeaderboardTab(currentLeaderboardTab); break;
+        case 'rewards': renderRewards(); break;
+        case 'my-rewards': renderMyRewardsPage(); break;
+        case 'history': renderHistory(); break;
+        case 'ecopoints': renderEcoPointsPage(); break;
+        case 'challenges': renderChallengesPage(); break;
+        case 'events': renderEventsPage(); break;
+        case 'profile': renderProfile(); break;
     }
+    
+    if (pageId !== 'leaderboard' && els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+    else if (pageId === 'leaderboard' && currentLeaderboardTab === 'student' && els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
 
-    toggleSidebar(true); // Close sidebar on nav
-    lucide.createIcons();
+    toggleSidebar(true);
+    if(window.lucide) lucide.createIcons();
 };
 
 window.toggleSidebar = (forceClose = false) => {
     if (forceClose) {
         els.sidebar.classList.add('-translate-x-full');
-        els.sidebarOverlay.classList.add('opacity-0');
+        els.sidebarOverlay.classList.add('opacity-0', 'hidden');
+        els.sidebarOverlay.classList.remove('opacity-0', 'hidden'); // Logic fix: remove hidden if not closing
         els.sidebarOverlay.classList.add('hidden');
     } else {
         els.sidebar.classList.toggle('-translate-x-full');
         els.sidebarOverlay.classList.toggle('hidden');
-        els.sidebarOverlay.classList.toggle('opacity-0');
+        setTimeout(() => els.sidebarOverlay.classList.toggle('opacity-0'), 0);
     }
 };
 
@@ -512,37 +430,34 @@ window.toggleSidebar = (forceClose = false) => {
 
 function renderDashboard() {
     const user = state.currentUser;
-    els.userPointsHeader.textContent = user.current_points;
-    els.userNameGreeting.textContent = user.full_name.split(' ')[0];
+    if(els.userPointsHeader) els.userPointsHeader.textContent = user.current_points;
+    if(els.userNameGreeting) els.userNameGreeting.textContent = user.full_name.split(' ')[0];
     
-    // Sidebar Header
-    els.sidebarName.textContent = user.full_name;
-    els.sidebarPoints.textContent = user.current_points;
+    if(els.sidebarName) els.sidebarName.textContent = user.full_name;
+    if(els.sidebarPoints) els.sidebarPoints.textContent = user.current_points;
     const level = getUserLevel(user.lifetime_points);
-    els.sidebarLevel.textContent = level.title;
-    els.sidebarAvatar.src = user.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
+    if(els.sidebarLevel) els.sidebarLevel.textContent = level.title;
+    if(els.sidebarAvatar) els.sidebarAvatar.src = user.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
 
-    // Impact stats
     const impact = state.userImpact;
-    document.getElementById('impact-recycled').textContent = `${(impact.total_plastic_kg || 0).toFixed(1)} kg`;
-    document.getElementById('impact-co2').textContent = `${(impact.co2_saved_kg || 0).toFixed(1)} kg`;
-    document.getElementById('impact-events').textContent = impact.events_attended || 0;
+    if(document.getElementById('impact-recycled')) document.getElementById('impact-recycled').textContent = `${(impact.total_plastic_kg || 0).toFixed(1)} kg`;
+    if(document.getElementById('impact-co2')) document.getElementById('impact-co2').textContent = `${(impact.co2_saved_kg || 0).toFixed(1)} kg`;
+    if(document.getElementById('impact-events')) document.getElementById('impact-events').textContent = impact.events_attended || 0;
 
-    // Upcoming Event Card
     const upcomingEvent = state.events.find(e => e.status === 'upcoming' || e.status === 'registered');
     const eventCard = document.getElementById('dashboard-event-card');
-    if (upcomingEvent) {
+    if (upcomingEvent && eventCard) {
         document.getElementById('dashboard-event-title').textContent = upcomingEvent.title;
         document.getElementById('dashboard-event-desc').textContent = upcomingEvent.description.substring(0, 75) + '...';
         eventCard.classList.remove('hidden');
-    } else {
+    } else if(eventCard) {
         eventCard.classList.add('hidden');
     }
-
     renderCheckinButtonState();
 }
 
 function renderCheckinButtonState() {
+    if(!els.dailyCheckinBtn) return;
     document.getElementById('dashboard-streak-text').textContent = `${state.currentUser.checkInStreak} Day Streak`;
     const btn = els.dailyCheckinBtn;
     const checkIcon = document.getElementById('checkin-check-icon');
@@ -553,18 +468,18 @@ function renderCheckinButtonState() {
         btn.classList.add('checkin-completed');
         btn.classList.remove('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
         btn.querySelector('h3').textContent = "Check-in Complete";
-        subtext.style.display = 'none';
-        doneText.classList.remove('hidden');
-        checkIcon.classList.remove('hidden');
+        if(subtext) subtext.style.display = 'none';
+        if(doneText) doneText.classList.remove('hidden');
+        if(checkIcon) checkIcon.classList.remove('hidden');
         btn.onclick = null;
     } else {
         btn.classList.remove('checkin-completed');
         btn.classList.add('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
         btn.querySelector('h3').textContent = "Daily Check-in";
-        subtext.style.display = 'block';
-        doneText.classList.add('hidden');
-        checkIcon.classList.add('hidden');
-        btn.onclick = openCheckinModal; // Re-assign onclick
+        if(subtext) subtext.style.display = 'block';
+        if(doneText) doneText.classList.add('hidden');
+        if(checkIcon) checkIcon.classList.add('hidden');
+        btn.onclick = openCheckinModal;
     }
 }
 
@@ -572,20 +487,29 @@ function renderProfile() {
     const u = state.currentUser;
     const l = getUserLevel(u.lifetime_points);
     
-    els.profileName.textContent = u.full_name;
-    els.profileEmail.textContent = u.email;
-    els.profileAvatar.src = u.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
-    els.profileJoined.textContent = 'Joined ' + new Date(u.joined_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    if(els.profileName) els.profileName.textContent = u.full_name;
+    if(els.profileEmail) els.profileEmail.textContent = u.email || u.id;
+    if(els.profileAvatar) els.profileAvatar.src = u.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
     
-    els.profileLevelTitle.textContent = l.title;
-    els.profileLevelNumber.textContent = l.level;
-    els.profileLevelProgress.style.width = l.progress + '%';
-    els.profileLevelNext.textContent = l.progressText;
+    // SAFE DATE RENDERING FIX
+    if(els.profileJoined) {
+        try {
+            const dateStr = u.joined_at ? new Date(u.joined_at) : new Date();
+            els.profileJoined.textContent = 'Joined ' + (!isNaN(dateStr) ? dateStr.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently');
+        } catch(e) {
+             els.profileJoined.textContent = 'Joined recently';
+        }
+    }
     
-    els.profileStudentId.textContent = u.student_id;
-    els.profileCourse.textContent = u.course;
-    els.profileMobile.textContent = u.mobile || 'Not set';
-    els.profileEmailPersonal.textContent = u.email;
+    if(els.profileLevelTitle) els.profileLevelTitle.textContent = l.title;
+    if(els.profileLevelNumber) els.profileLevelNumber.textContent = l.level;
+    if(els.profileLevelProgress) els.profileLevelProgress.style.width = l.progress + '%';
+    if(els.profileLevelNext) els.profileLevelNext.textContent = l.progressText;
+    
+    if(els.profileStudentId) els.profileStudentId.textContent = u.student_id || 'N/A';
+    if(els.profileCourse) els.profileCourse.textContent = u.course || 'N/A';
+    if(els.profileMobile) els.profileMobile.textContent = u.mobile || 'Not set';
+    if(els.profileEmailPersonal) els.profileEmailPersonal.textContent = u.email || 'N/A';
 }
 
 let currentLeaderboardTab = 'student';
@@ -596,33 +520,19 @@ window.showLeaderboardTab = (tab) => {
     const contentStudent = document.getElementById('leaderboard-content-student');
     const contentDept = document.getElementById('leaderboard-content-department');
 
-    // NOTE: Department leaderboard logic is not implemented as the schema doesn't support it.
-    // We will hide the button for now.
     btnDept.classList.add('hidden');
-    // Force student tab
-    tab = 'student';
+    tab = 'student'; // Force student for now
 
-    if (tab === 'department') {
-        // This block is currently unreachable
-        btnDept.classList.add('active');
-        btnStudent.classList.remove('active');
-        contentDept.classList.remove('hidden');
-        contentStudent.classList.add('hidden');
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-        // renderDepartmentLeaderboard(); // This function would need to be created
-    } else {
-        // Default to student
-        btnStudent.classList.add('active');
-        btnDept.classList.remove('active');
-        contentStudent.classList.remove('hidden');
-        contentDept.classList.add('hidden');
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
-        renderStudentLeaderboard();
-    }
+    btnStudent.classList.add('active');
+    btnDept.classList.remove('active');
+    contentStudent.classList.remove('hidden');
+    contentDept.classList.add('hidden');
+    if(els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
+    renderStudentLeaderboard();
 };
 
 function renderStudentLeaderboard() {
-    const sorted = state.leaderboard; // Already sorted from Supabase
+    const sorted = state.leaderboard;
     if (sorted.length === 0) {
         els.lbPodium.innerHTML = '<p class="text-center text-gray-500">No rankings yet.</p>';
         return;
@@ -664,7 +574,7 @@ function renderStudentLeaderboard() {
                     <div class="circle">${user.initials}</div>
                     <div class="user-info">
                         <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''}</strong>
-                        <span class="sub-class">${user.course}</span>
+                        <span class="sub-class">${user.course || 'Student'}</span>
                     </div>
                 </div>
                 <div class="points-display">${user.lifetimePoints} pts</div>
@@ -675,7 +585,7 @@ function renderStudentLeaderboard() {
 
 function renderRewards() {
     els.productGrid.innerHTML = '';
-    let products = getAllProducts(); // Gets products combined with store info
+    let products = getAllProducts();
 
     const searchTerm = els.storeSearch.value.toLowerCase();
     if(searchTerm.length > 0) {
@@ -726,7 +636,7 @@ function renderRewards() {
             </div>
         `;
     });
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 window.showProductDetailPage = (productId) => {
@@ -803,13 +713,12 @@ window.showProductDetailPage = (productId) => {
                     </div>
                 </div>
             </div>
-        </div>
-    `;
+        `;
 
     els.pages.forEach(p => p.classList.remove('active'));
     els.productDetailPage.classList.add('active');
     document.querySelector('.main-content').scrollTop = 0;
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 };
 
 function renderMyRewardsPage() {
@@ -818,21 +727,12 @@ function renderMyRewardsPage() {
         els.allRewardsList.innerHTML = `<p class="text-sm text-center text-gray-500">You haven't purchased any rewards yet.</p>`;
         return;
     }
-    
     state.userRewards.forEach(ur => {
-        const isUsed = ur.status === 'confirmed'; // 'confirmed' from schema means 'used'
+        const isUsed = ur.status === 'confirmed';
         const isCancelled = ur.status === 'cancelled';
-        
-        let buttonHTML = `
-            <button onclick="openRewardQrModal('${ur.userRewardId}')" class="text-xs font-semibold px-3 py-2 rounded-full bg-emerald-600 text-white">
-                View QR
-            </button>`;
-        
-        if (isUsed) {
-            buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Used</span>`;
-        } else if (isCancelled) {
-            buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300">Cancelled</span>`;
-        }
+        let buttonHTML = `<button onclick="openRewardQrModal('${ur.userRewardId}')" class="text-xs font-semibold px-3 py-2 rounded-full bg-emerald-600 text-white">View QR</button>`;
+        if (isUsed) buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Used</span>`;
+        else if (isCancelled) buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300">Cancelled</span>`;
 
         els.allRewardsList.innerHTML += `
             <div class="glass-card p-4 rounded-2xl flex items-center justify-between ${isUsed || isCancelled ? 'opacity-60' : ''}">
@@ -874,7 +774,7 @@ function renderHistory() {
             </div>
         `;
     });
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 function renderChallengesPage() {
@@ -885,15 +785,10 @@ function renderChallengesPage() {
     }
     state.dailyChallenges.forEach(c => {
         let buttonHTML = '';
-        if (c.status === 'active') {
-            buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white">${c.buttonText}</button>`;
-        } else if (c.status === 'pending') {
-            buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 cursor-not-allowed">Pending Review</button>`;
-        } else if (c.status === 'completed') {
-            buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-not-allowed">Completed</button>`;
-        } else if (c.status === 'rejected') {
-             buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 text-red-700">${c.buttonText}</button>`;
-        }
+        if (c.status === 'active') buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white">${c.buttonText}</button>`;
+        else if (c.status === 'pending') buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 cursor-not-allowed">Pending Review</button>`;
+        else if (c.status === 'completed') buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-not-allowed">Completed</button>`;
+        else if (c.status === 'rejected') buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 text-red-700">${c.buttonText}</button>`;
         
         els.challengesList.innerHTML += `
             <div class="glass-card p-4 rounded-2xl flex items-start">
@@ -911,7 +806,7 @@ function renderChallengesPage() {
             </div>
         `;
     });
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 function renderEventsPage() {
@@ -922,15 +817,11 @@ function renderEventsPage() {
     }
     state.events.forEach(e => {
         let statusButton = '';
-        if (e.status === 'upcoming') {
-            statusButton = `<button onclick="handleEventRSVP('${e.id}')" class="w-full bg-green-600 text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center space-x-2"><i data-lucide="ticket" class="w-4 h-4"></i><span>RSVP +${e.points} pts</span></button>`;
-        } else if (e.status === 'registered') {
-            statusButton = `<div class="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check" class="w-4 h-4"></i><span>Registered</span></div>`;
-        } else if (e.status === 'attended') {
-            statusButton = `<div class="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check-circle" class="w-4 h-4"></i><span>Attended (+${e.points} pts)</span></div>`;
-        } else {
-             statusButton = `<div class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="x-circle" class="w-4 h-4"></i><span>Missed</span></div>`;
-        }
+        if (e.status === 'upcoming') statusButton = `<button onclick="handleEventRSVP('${e.id}')" class="w-full bg-green-600 text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center space-x-2"><i data-lucide="ticket" class="w-4 h-4"></i><span>RSVP +${e.points} pts</span></button>`;
+        else if (e.status === 'registered') statusButton = `<div class="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check" class="w-4 h-4"></i><span>Registered</span></div>`;
+        else if (e.status === 'attended') statusButton = `<div class="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check-circle" class="w-4 h-4"></i><span>Attended (+${e.points} pts)</span></div>`;
+        else statusButton = `<div class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="x-circle" class="w-4 h-4"></i><span>Missed</span></div>`;
+        
         els.eventsList.innerHTML += `
             <div class="glass-card p-4 rounded-2xl ${e.status === 'missed' ? 'opacity-60' : ''}">
                 <div class="flex items-start">
@@ -945,7 +836,7 @@ function renderEventsPage() {
             </div>
         `;
     });
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 function renderEcoPointsPage() {
@@ -968,15 +859,13 @@ function renderEcoPointsPage() {
     state.levels.forEach(lvl => {
          levelsContainer.innerHTML += `<div class="flex items-center"><span class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center mr-3 text-sm font-bold text-green-600 dark:text-green-300">${lvl.level}</span><div><p class="text-sm font-bold text-gray-800 dark:text-gray-100">${lvl.title}</p><p class="text-xs text-gray-500 dark:text-gray-400">${lvl.minPoints} pts required</p></div></div>`;
     });
-
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
 
 // =========================================
 // 9. MODAL & ACTION HANDLERS
 // =========================================
 
-// --- Check-in ---
 const checkinModal = document.getElementById('checkin-modal');
 window.openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
@@ -1010,15 +899,10 @@ window.closeCheckinModal = () => {
 };
 
 window.handleDailyCheckin = async () => {
-    // 1. Insert the check-in record
     const { data: checkin, error } = await supabase
         .from('daily_checkins')
-        .insert({ 
-            user_id: state.currentUser.id, 
-            points_awarded: state.checkInReward 
-        })
-        .select()
-        .single();
+        .insert({ user_id: state.currentUser.id, points_awarded: state.checkInReward })
+        .select().single();
 
     if (error) {
         console.error('Check-in error:', error);
@@ -1028,22 +912,17 @@ window.handleDailyCheckin = async () => {
     }
 
     if (checkin) {
-        // 2. Triggers will update points and streak. Re-fetch user points & streak.
         const { data: user } = await supabase.from('users').select('current_points').eq('id', state.currentUser.id).single();
         const { data: streak } = await supabase.from('user_streaks').select('current_streak').eq('user_id', state.currentUser.id).single();
 
-        // 3. Update state
         animatePointsUpdate(user.current_points);
         state.currentUser.isCheckedInToday = true;
         state.currentUser.checkInStreak = streak.current_streak;
-        
-        // 4. Update UI
         closeCheckinModal();
         renderDashboard();
     }
 };
 
-// --- Purchase ---
 window.openPurchaseModal = (productId) => {
     const { store, product } = getProduct(productId);
     if (!product) return;
@@ -1072,7 +951,7 @@ window.openPurchaseModal = (productId) => {
     
     els.purchaseModalOverlay.classList.remove('hidden');
     setTimeout(() => els.purchaseModal.classList.remove('translate-y-full'), 10);
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 };
 
 window.closePurchaseModal = () => {
@@ -1093,20 +972,18 @@ window.confirmPurchase = async (productId) => {
         return;
     }
 
-    // 1. Create the order. Status 'confirmed' will fire triggers.
     const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({ 
             user_id: state.currentUser.id, 
             store_id: product.storeId, 
-            status: 'confirmed', // This will trigger point deduction
+            status: 'confirmed', 
             total_points: product.cost, 
             total_price: product.discountedPrice,
-            requires_approval: false, // Assuming direct confirmation
-            approved_by: state.currentUser.id // Self-approved
+            requires_approval: false, 
+            approved_by: state.currentUser.id 
         })
-        .select()
-        .single();
+        .select().single();
 
     if (orderError) {
         console.error('Order error:', orderError);
@@ -1116,44 +993,20 @@ window.confirmPurchase = async (productId) => {
         return;
     }
 
-    // 2. Add item to the order
-    const { error: itemError } = await supabase
-        .from('order_items')
-        .insert({ 
-            order_id: order.id, 
-            product_id: product.productId, 
-            quantity: 1, 
-            price_each: product.discountedPrice, 
-            points_each: product.cost 
-        });
+    await supabase.from('order_items').insert({ 
+        order_id: order.id, product_id: product.productId, quantity: 1, price_each: product.discountedPrice, points_each: product.cost 
+    });
 
-    if (itemError) {
-        console.error('Order item error:', itemError);
-        // Try to roll back order?
-        alert('There was an error adding items to your order.');
-        // In a real app, you'd handle this (e.g., delete the order)
-        btn.disabled = false;
-        btn.textContent = 'Confirm Purchase';
-        return;
-    }
-
-    // 3. Refresh user points (triggers should have run)
     await refreshUserPoints();
-    
-    // 4. Refresh "My Rewards" page data (in background)
     await loadMyRewards();
-
-    // 5. Close modal and navigate
     closePurchaseModal();
     showPage('my-rewards');
 };
 
-// --- QR Modal ---
 window.openRewardQrModal = (userRewardId) => {
     const reward = state.userRewards.find(r => r.userRewardId === userRewardId);
     if (!reward) return;
     
-    // The QR code should be for the ORDER, not the item.
     const qrData = reward.orderId; 
     
     els.qrModal.innerHTML = `
@@ -1163,7 +1016,6 @@ window.openRewardQrModal = (userRewardId) => {
         </div>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${reward.storeName}</strong> to redeem <strong>${reward.productName}</strong>.</p>
         <div class="flex justify-center mb-4">
-            <!-- Using a placeholder for QR generation -->
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}" class="rounded-lg border">
         </div>
         <p class="text-center text-xs text-gray-400 mb-2">Order ID: ${reward.orderId}</p>
@@ -1171,7 +1023,7 @@ window.openRewardQrModal = (userRewardId) => {
     `;
     els.qrModalOverlay.classList.remove('hidden');
     setTimeout(() => els.qrModal.classList.remove('translate-y-full'), 10);
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 };
 
 window.closeQrModal = () => {
@@ -1179,7 +1031,6 @@ window.closeQrModal = () => {
     setTimeout(() => els.qrModalOverlay.classList.add('hidden'), 300);
 };
 
-// --- Chatbot ---
 const chatbotModal = document.getElementById('chatbot-modal');
 window.openChatbotModal = () => {
     chatbotModal.classList.add('open');
@@ -1190,11 +1041,8 @@ window.closeChatbotModal = () => {
     setTimeout(() => chatbotModal.classList.add('invisible'), 300);
 };
 
-// --- Eco Quiz ---
 const quizModal = document.getElementById('eco-quiz-modal');
 window.openEcoQuizModal = (challengeId) => {
-    // TODO: Fetch quiz questions for challengeId
-    // For now, use static question
     document.getElementById('eco-quiz-modal-body').innerHTML = `
         <p id="eco-quiz-modal-question" class="text-lg text-gray-700 dark:text-gray-200 mb-4">What does 'composting' primarily help reduce?</p>
         <div id="eco-quiz-modal-options" class="space-y-3">
@@ -1217,12 +1065,10 @@ window.handleQuizAnswer = async (isCorrect, challengeId) => {
     resultDiv.classList.remove('hidden');
 
     if (isCorrect) {
-        // Auto-approve quiz. Insert as 'pending' then update to 'approved' to fire trigger.
         const { data: sub, error: insError } = await supabase
             .from('challenge_submissions')
             .insert({ challenge_id: challengeId, user_id: state.currentUser.id, status: 'pending' })
-            .select()
-            .single();
+            .select().single();
 
         if (insError) {
              resultDiv.innerHTML = `<p class="font-bold text-yellow-600">You already completed this!</p>`;
@@ -1231,12 +1077,11 @@ window.handleQuizAnswer = async (isCorrect, challengeId) => {
         }
 
         if (sub) {
-            const { data: updatedSub, error: updError } = await supabase
+            const { data: updatedSub } = await supabase
                 .from('challenge_submissions')
-                .update({ status: 'approved', admin_id: state.currentUser.id }) // Self-approve
+                .update({ status: 'approved', admin_id: state.currentUser.id }) 
                 .eq('id', sub.id)
-                .select()
-                .single();
+                .select().single();
             
             if (updatedSub) {
                 const challenge = state.dailyChallenges.find(c => c.id === challengeId);
@@ -1252,7 +1097,6 @@ window.handleQuizAnswer = async (isCorrect, challengeId) => {
     setTimeout(closeEcoQuizModal, 1500);
 };
 
-// --- Camera / Upload ---
 let currentCameraStream = null;
 let currentChallengeIdForUpload = null;
 
@@ -1261,9 +1105,6 @@ window.openChallengeUpload = (challengeId) => {
     if (!challenge) return;
     
     currentChallengeIdForUpload = challengeId;
-    
-    // For web, just open file input
-    // The camera modal is complex and often fails in webviews.
     const fileInput = document.getElementById('challenge-file-input');
     fileInput.onchange = handleChallengeFileSelect;
     fileInput.click();
@@ -1274,14 +1115,6 @@ async function handleChallengeFileSelect(event) {
     if (!file || !currentChallengeIdForUpload) return;
     
     alert('Uploading file... this may take a moment.');
-    
-    // TODO: Implement Supabase Storage upload
-    // 1. const { data, error } = await supabase.storage.from('challenge-uploads').upload(`public/${state.currentUser.id}/${challengeId}-${new Date().getTime()}`, file)
-    // 2. If no error, get public URL: const { data: publicURL } = supabase.storage.from('challenge-uploads').getPublicUrl(data.path)
-    // 3. Insert submission with publicURL.data.publicUrl
-
-    // --- SIMULATED UPLOAD FOR NOW ---
-    // This simulates a successful upload and submission
     const fakePublicURL = 'https://supabase.io/simulated-upload.jpg';
     
     const { data, error } = await supabase
@@ -1299,46 +1132,30 @@ async function handleChallengeFileSelect(event) {
     } else {
         alert('Submission successful! It is now pending review.');
         const challenge = state.dailyChallenges.find(c => c.id === currentChallengeIdForUpload);
-        if (challenge) {
-            challenge.status = 'pending';
-        }
+        if (challenge) challenge.status = 'pending';
         renderChallengesPage();
     }
-    
-    // Reset file input
     event.target.value = null;
     currentChallengeIdForUpload = null;
 }
 
-// Keep camera modal functions from old file, but they are not used by default
 window.startCamera = async (challengeId) => {
-    // This is the function you'd call if you want the full camera modal
     alert("Camera modal not implemented, using file upload instead.");
     openChallengeUpload(challengeId);
 };
-window.closeCameraModal = () => { /* ... */ };
-window.capturePhoto = () => { /* ... */ };
-window.switchCamera = () => { /* ... */ };
+window.closeCameraModal = () => { };
+window.capturePhoto = () => { };
+window.switchCamera = () => { };
 
-// --- Event RSVP ---
 window.handleEventRSVP = async (eventId) => {
-    const { data, error } = await supabase
-        .from('event_attendance')
-        .insert({
-            event_id: eventId,
-            user_id: state.currentUser.id,
-            status: 'registered'
-        });
-    
+    const { data, error } = await supabase.from('event_attendance').insert({ event_id: eventId, user_id: state.currentUser.id, status: 'registered' });
     if (error) {
         console.error('RSVP error:', error);
         alert('Error registering for event. You may already be registered.');
     } else {
         alert('Successfully registered for the event!');
         const event = state.events.find(e => e.id === eventId);
-        if (event) {
-            event.status = 'registered';
-        }
+        if (event) event.status = 'registered';
         renderEventsPage();
     }
 };
@@ -1347,9 +1164,6 @@ window.handleEventRSVP = async (eventId) => {
 // 10. BACKGROUND DATA REFRESHERS
 // =========================================
 
-/**
- * Fetches and updates the state.userRewards list.
- */
 async function loadMyRewards() {
     const { data: ordersRes, error } = await supabase
         .from('orders')
@@ -1375,153 +1189,137 @@ async function loadMyRewards() {
             });
         });
     });
-    
-    // Re-render if on the page
-    if (document.getElementById('my-rewards').classList.contains('active')) {
-        renderMyRewardsPage();
-    }
+    if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
 }
-
 
 // =========================================
 // 11. EVENT LISTENERS
 // =========================================
 
 function setupEventListeners() {
-    // Search & Sort
-    els.storeSearch.addEventListener('input', renderRewards);
-    els.storeSearchClear.addEventListener('click', () => { els.storeSearch.value = ''; renderRewards(); });
-    els.sortBy.addEventListener('change', renderRewards);
+    if(els.storeSearch) els.storeSearch.addEventListener('input', renderRewards);
+    if(els.storeSearchClear) els.storeSearchClear.addEventListener('click', () => { els.storeSearch.value = ''; renderRewards(); });
+    if(els.sortBy) els.sortBy.addEventListener('change', renderRewards);
+    if(document.getElementById('sidebar-toggle-btn')) document.getElementById('sidebar-toggle-btn').addEventListener('click', () => toggleSidebar());
 
-    // Sidebar Toggles
-    document.getElementById('sidebar-toggle-btn').addEventListener('click', () => toggleSidebar());
-    // The overlay click is set in index.html
-
-    // Theme Toggle
     if (localStorage.getItem('eco-theme') === 'dark' || (!localStorage.getItem('eco-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark');
-        document.getElementById('theme-text').textContent = 'Dark Mode';
-        document.getElementById('theme-icon').setAttribute('data-lucide', 'moon');
+        if(document.getElementById('theme-text')) document.getElementById('theme-text').textContent = 'Dark Mode';
+        if(document.getElementById('theme-icon')) document.getElementById('theme-icon').setAttribute('data-lucide', 'moon');
     } else {
         document.documentElement.classList.remove('dark');
-        document.getElementById('theme-text').textContent = 'Light Mode';
-        document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
+        if(document.getElementById('theme-text')) document.getElementById('theme-text').textContent = 'Light Mode';
+        if(document.getElementById('theme-icon')) document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
     }
-    document.getElementById('theme-toggle-btn').addEventListener('click', () => {
-        const isDark = document.documentElement.classList.toggle('dark');
-        localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
-        document.getElementById('theme-text').textContent = isDark ? 'Dark Mode' : 'Light Mode';
-        document.getElementById('theme-icon').setAttribute('data-lucide', isDark ? 'moon' : 'sun');
-        lucide.createIcons();
-    });
+    
+    if(document.getElementById('theme-toggle-btn')) {
+        document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-text').textContent = isDark ? 'Dark Mode' : 'Light Mode';
+            document.getElementById('theme-icon').setAttribute('data-lucide', isDark ? 'moon' : 'sun');
+            if(window.lucide) lucide.createIcons();
+        });
+    }
 
-    // Logout
-    document.getElementById('logout-button').addEventListener('click', async () => {
-        await supabase.auth.signOut();
-        // The auth listener will handle the redirect
-    });
+    if(document.getElementById('logout-button')) {
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            await supabase.auth.signOut();
+        });
+    }
 
-    // Change Password Form
     const pwForm = document.getElementById('change-password-form');
-    pwForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newPassword = document.getElementById('new-password').value;
-        const msg = document.getElementById('password-message');
-        const btn = document.getElementById('change-password-button');
-        btn.disabled = true;
+    if(pwForm) {
+        pwForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newPassword = document.getElementById('new-password').value;
+            const msg = document.getElementById('password-message');
+            const btn = document.getElementById('change-password-button');
+            btn.disabled = true;
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) {
+                msg.textContent = `Error: ${error.message}`;
+                msg.classList.add('text-red-500');
+            } else {
+                msg.textContent = 'Password updated successfully!';
+                msg.classList.add('text-green-500');
+                pwForm.reset();
+            }
+            btn.disabled = false;
+        });
+    }
 
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-
-        if (error) {
-            msg.textContent = `Error: ${error.message}`;
-            msg.classList.add('text-red-500');
-        } else {
-            msg.textContent = 'Password updated successfully!';
-            msg.classList.add('text-green-500');
-            pwForm.reset();
-        }
-        btn.disabled = false;
-    });
-
-    // Redeem Code Form
     const redeemForm = document.getElementById('redeem-code-form');
-    redeemForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const code = document.getElementById('redeem-input').value.toUpperCase();
-        const msg = document.getElementById('redeem-message');
-        const btn = document.getElementById('redeem-submit-btn');
-        btn.disabled = true;
-        msg.textContent = 'Redeeming...';
-        msg.className = 'text-sm text-center text-gray-500';
+    if(redeemForm) {
+        redeemForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const code = document.getElementById('redeem-input').value.toUpperCase();
+            const msg = document.getElementById('redeem-message');
+            const btn = document.getElementById('redeem-submit-btn');
+            btn.disabled = true;
+            msg.textContent = 'Redeeming...';
+            msg.className = 'text-sm text-center text-gray-500';
 
-        // 1. Find the coupon ID from the code
-        const { data: coupon, error: couponError } = await supabase
-            .from('coupons')
-            .select('id')
-            .eq('code', code)
-            .single();
-        
-        if (couponError || !coupon) {
-            msg.textContent = 'Invalid coupon code.';
-            msg.className = 'text-sm text-center text-red-500';
+            const { data: coupon, error: couponError } = await supabase.from('coupons').select('id').eq('code', code).single();
+            
+            if (couponError || !coupon) {
+                msg.textContent = 'Invalid coupon code.';
+                msg.className = 'text-sm text-center text-red-500';
+                btn.disabled = false;
+                return;
+            }
+
+            const { data: redemption, error: redeemError } = await supabase
+                .from('coupon_redemptions')
+                .insert({ coupon_id: coupon.id, user_id: state.currentUser.id })
+                .select().single();
+            
+            if (redeemError) {
+                msg.textContent = `Error: ${redeemError.message}`;
+                msg.className = 'text-sm text-center text-red-500';
+                btn.disabled = false;
+                return;
+            }
+
+            if (redemption) {
+                await refreshUserPoints();
+                msg.textContent = `Success! +${redemption.points_awarded} points added!`;
+                msg.className = 'text-sm text-center text-green-500';
+                redeemForm.reset();
+            }
             btn.disabled = false;
-            return;
-        }
+        });
+    }
 
-        // 2. Attempt to redeem it
-        const { data: redemption, error: redeemError } = await supabase
-            .from('coupon_redemptions')
-            .insert({ coupon_id: coupon.id, user_id: state.currentUser.id })
-            .select()
-            .single();
-        
-        if (redeemError) {
-            msg.textContent = `Error: ${redeemError.message}`;
-            msg.className = 'text-sm text-center text-red-500';
-            btn.disabled = false;
-            return;
-        }
-
-        if (redemption) {
-            // 3. Success, refresh points
-            await refreshUserPoints();
-            msg.textContent = `Success! +${redemption.points_awarded} points added!`;
-            msg.className = 'text-sm text-center text-green-500';
-            redeemForm.reset();
-        }
-        btn.disabled = false;
-    });
-
-    // Chatbot Form (Static)
     const chatbotForm = document.getElementById('chatbot-form');
-    chatbotForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const input = document.getElementById('chatbot-input');
-        const messages = document.getElementById('chatbot-messages');
-        if (input.value.trim() === '') return;
+    if(chatbotForm) {
+        chatbotForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chatbot-input');
+            const messages = document.getElementById('chatbot-messages');
+            if (input.value.trim() === '') return;
 
-        messages.innerHTML += `
-            <div class="flex justify-end">
-                <div class="bg-green-600 text-white p-3 rounded-lg rounded-br-none max-w-xs">
-                    <p class="text-sm">${input.value}</p>
-                </div>
-            </div>`;
-        
-        // Simple canned response
-        setTimeout(() => {
-             messages.innerHTML += `
-                <div class="flex">
-                    <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg rounded-bl-none max-w-xs">
-                        <p class="text-sm text-gray-800 dark:text-gray-100">Thanks for asking! You can recycle plastics #1, #2, and #5 on campus at the blue bins.</p>
+            messages.innerHTML += `
+                <div class="flex justify-end">
+                    <div class="bg-green-600 text-white p-3 rounded-lg rounded-br-none max-w-xs">
+                        <p class="text-sm">${input.value}</p>
                     </div>
                 </div>`;
+            
+            setTimeout(() => {
+                messages.innerHTML += `
+                    <div class="flex">
+                        <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg rounded-bl-none max-w-xs">
+                            <p class="text-sm text-gray-800 dark:text-gray-100">Thanks for asking! You can recycle plastics #1, #2, and #5 on campus at the blue bins.</p>
+                        </div>
+                    </div>`;
+                messages.scrollTop = messages.scrollHeight;
+            }, 1000);
+            
+            input.value = '';
             messages.scrollTop = messages.scrollHeight;
-        }, 1000);
-        
-        input.value = '';
-        messages.scrollTop = messages.scrollHeight;
-    });
+        });
+    }
     
-    // Initial Lucide icons
-    lucide.createIcons();
+    if(window.lucide) lucide.createIcons();
 }
