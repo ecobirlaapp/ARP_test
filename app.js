@@ -87,7 +87,7 @@ const els = {
 
 // Listen for authentication changes
 // This line should now work with the corrected import
-supabase.auth.onAuthStateChanged(async (event, session) => {
+supabase.auth.onAuthStateChange(async (event, session) => {
     if (session) {
         state.currentAuthUser = session.user;
         // User is signed in, fetch all app data
