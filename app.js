@@ -6,28 +6,461 @@ import { supabase } from './supabase-client.js';
 // =========================================
 // 2. APPLICATION STATE
 // =========================================
+
 let state = {
-    currentUser: null, 
-    userImpact: { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 },
+    currentUser: null, // Will hold profile from 'users' table
+    userAuth: null,    // Will hold 'auth.users' object
+    checkInReward: 10,
     leaderboard: [],
+    stores: [],
+    products: [],      // All products, flattened
     history: [],
     dailyChallenges: [],
     events: [],
-    stores: [],
-    products: [],
-    userRewards: [], 
-    checkInReward: 10, 
+    userRewards: [],   // User's 'orders'
     levels: [
         { level: 1, title: 'Green Starter', minPoints: 0, nextMin: 1001 },
         { level: 2, title: 'Eco Learner', minPoints: 1001, nextMin: 2001 },
         { level: 3, title: 'Sustainability Leader', minPoints: 2001, nextMin: 4001 },
-    ],
-    currentAuthUser: null 
+    ]
 };
 
 // =========================================
-// 3. DOM ELEMENT CACHE
+// 3. AUTHENTICATION
 // =========================================
+
+/**
+ * Checks if a user is logged in.
+ * If not, redirects to login.html.
+ * If logged in, loads the application.
+ */
+const checkAuth = async () => {
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+        console.error('Error getting session:', error.message);
+        redirectToLogin();
+        return;
+    }
+    
+    if (!session) {
+        console.log('No active session. Redirecting to login.');
+        redirectToLogin();
+        return;
+    }
+
+    // User is logged in
+    console.log('Session found. User is authenticated.');
+    state.userAuth = session.user;
+    await initializeApp();
+};
+
+/**
+ * Main data-loading function after auth.
+ */
+const initializeApp = async () => {
+    // 1. Get the user's profile from the 'users' table
+    const { data: userProfile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_user_id', state.userAuth.id)
+        .single();
+
+    if (error || !userProfile) {
+        console.error('Error fetching user profile:', error?.message);
+        alert('Could not load user profile. Logging out.');
+        await handleLogout();
+        return;
+    }
+
+    state.currentUser = userProfile;
+    console.log('Current user profile loaded:', state.currentUser);
+
+    // 2. Load all initial data in parallel
+    // We can show the app *after* the most critical data (dashboard) is loaded
+    await loadDashboardData();
+    renderDashboard(); // First render to show user info
+    
+    // Hide loader
+    setTimeout(() => document.getElementById('app-loading').classList.add('loaded'), 500);
+    lucide.createIcons();
+    
+    // Load other data in the background
+    Promise.all([
+        loadStoreAndProductData(),
+        loadLeaderboardData(),
+        loadHistoryData(),
+        loadChallengesData(),
+        loadEventsData(),
+        loadUserRewardsData()
+    ]);
+};
+
+const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error('Error logging out:', error.message);
+    }
+    redirectToLogin();
+};
+
+const redirectToLogin = () => {
+    window.location.replace('login.html');
+};
+
+// =========================================
+// 4. DATA LOADING (FETCH FROM SUPABASE)
+// =========================================
+
+const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
+/**
+ * Fetches all data needed for the dashboard.
+ * - User's check-in status
+ * - User's streak
+ * - User's impact
+ * - A featured event
+ */
+const loadDashboardData = async () => {
+    const userId = state.currentUser.id;
+    const today = getTodayDateString();
+
+    const [
+        { data: checkinData, error: checkinError },
+        { data: streakData, error: streakError },
+        { data: impactData, error: impactError },
+        { data: eventData, error: eventError }
+    ] = await Promise.all([
+        supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', today).limit(1),
+        supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
+        supabase.from('user_impact').select('*').eq('user_id', userId).single(),
+        supabase.from('events').select('title, description').order('start_at', { ascending: true }).limit(1)
+    ]);
+    
+    // Process Check-in
+    if (!checkinError && checkinData && checkinData.length > 0) {
+        state.currentUser.isCheckedInToday = true;
+    } else {
+        state.currentUser.isCheckedInToday = false;
+    }
+
+    // Process Streak
+    if (!streakError && streakData) {
+        state.currentUser.checkInStreak = streakData.current_streak;
+    } else {
+        state.currentUser.checkInStreak = 0;
+    }
+    
+    // Process Impact
+    if (!impactError && impactData) {
+        state.currentUser.impact = impactData;
+    } else {
+        state.currentUser.impact = { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
+    }
+    
+    // Process Event
+    if (!eventError && eventData && eventData.length > 0) {
+        state.featuredEvent = eventData[0];
+    } else {
+        state.featuredEvent = { title: "No upcoming events", description: "Check back soon for more activities!" };
+    }
+};
+
+/**
+ * Fetches all store and product data.
+ * This is a complex query joining multiple tables.
+ */
+const loadStoreAndProductData = async () => {
+    const { data, error } = await supabase
+        .from('products')
+        .select(`
+            id, name, description, original_price, discounted_price, ecopoints_cost,
+            store_id,
+            stores ( name, logo_url ),
+            product_images ( image_url, sort_order ),
+            product_features ( feature, sort_order ),
+            product_specifications ( spec_key, spec_value, sort_order )
+        `)
+        .eq('is_active', true);
+        
+    if (error) {
+        console.error('Error fetching products:', error.message);
+        return;
+    }
+
+    // Process and flatten data
+    const products = data.map(p => ({
+        ...p,
+        // Ensure arrays are sorted
+        images: p.product_images.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url),
+        features: p.product_features.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature),
+        specifications: p.product_specifications.sort((a,b) => a.sort_order - b.sort_order),
+        // Flatten store info
+        storeName: p.stores.name,
+        storeLogo: p.stores.logo_url,
+        // Add a default popularity score (you can add this column to your table)
+        popularity: Math.floor(Math.random() * 50) 
+    }));
+    
+    state.products = products;
+    console.log('Products loaded:', state.products);
+    
+    // Re-render rewards if on that page
+    if (document.getElementById('rewards').classList.contains('active')) {
+        renderRewards();
+    }
+};
+
+/**
+ * Fetches leaderboard data (top 20 users).
+ */
+const loadLeaderboardData = async () => {
+    const { data, error } = await supabase
+        .from('users')
+        .select('id, full_name, course, lifetime_points, profile_img_url')
+        .order('lifetime_points', { ascending: false })
+        .limit(20);
+
+    if (error) {
+        console.error('Error fetching leaderboard:', error.message);
+        return;
+    }
+
+    state.leaderboard = data.map(u => ({
+        ...u,
+        name: u.full_name,
+        initials: (u.full_name || '...').split(' ').map(n => n[0]).join(''),
+        isCurrentUser: u.id === state.currentUser.id
+    }));
+    
+    console.log('Leaderboard loaded:', state.leaderboard);
+    
+    // TODO: Add department leaderboard loading
+    state.departmentLeaderboard = [
+        { id: 'd1', name: 'BSc IT', points: 0 },
+        { id: 'd2', name: 'BMS', points: 0 },
+        { id: 'd3', name: 'BAF', points: 0 },
+    ];
+    
+    if (document.getElementById('leaderboard').classList.contains('active')) {
+        renderStudentLeaderboard();
+        renderDepartmentLeaderboard();
+    }
+};
+
+/**
+ * Fetches user's transaction history.
+ */
+const loadHistoryData = async () => {
+    const { data, error } = await supabase
+        .from('points_ledger')
+        .select('*')
+        .eq('user_id', state.currentUser.id)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching history:', error.message);
+        return;
+    }
+
+    state.history = data.map(item => ({
+        type: item.source_type,
+        description: item.description,
+        points: item.points_delta,
+        date: formatDate(item.created_at),
+        icon: getIconForHistory(item.source_type)
+    }));
+    
+    console.log('History loaded:', state.history);
+    if (document.getElementById('history').classList.contains('active')) {
+        renderHistory();
+    }
+};
+
+/**
+ * Fetches active challenges.
+ */
+const loadChallengesData = async () => {
+    const { data, error } = await supabase
+        .from('challenges')
+        .select('id, title, description, points_reward, type')
+        .eq('is_active', true);
+        
+    if (error) {
+        console.error('Error fetching challenges:', error.message);
+        return;
+    }
+    
+    state.dailyChallenges = data.map(c => ({
+        ...c,
+        icon: getIconForChallenge(c.type),
+        status: 'active', // TODO: Check 'challenge_submissions' table
+        buttonText: c.type === 'quiz' ? 'Start Quiz' : 'Upload Selfie'
+    }));
+
+    console.log('Challenges loaded:', state.dailyChallenges);
+    if (document.getElementById('challenges').classList.contains('active')) {
+        renderChallengesPage();
+    }
+};
+
+/**
+ * Fetches all events.
+ */
+const loadEventsData = async () => {
+    const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_at', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching events:', error.message);
+        return;
+    }
+
+    state.events = data.map(e => ({
+        ...e,
+        date: formatDate(e.start_at, { month: 'short', day: 'numeric', year: 'numeric' }),
+        points: e.points_reward,
+        status: 'upcoming' // TODO: Check 'event_attendance' table
+    }));
+
+    console.log('Events loaded:', state.events);
+    if (document.getElementById('events').classList.contains('active')) {
+        renderEventsPage();
+    }
+};
+
+/**
+ * Fetches user's purchased rewards (orders).
+ */
+const loadUserRewardsData = async () => {
+    const { data, error } = await supabase
+        .from('orders')
+        .select(`
+            id, created_at, status,
+            order_items (
+                products (
+                    id, name,
+                    product_images ( image_url ),
+                    stores ( name )
+                )
+            )
+        `)
+        .eq('user_id', state.currentUser.id)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching user rewards:', error.message);
+        return;
+    }
+
+    state.userRewards = data.map(order => {
+        const item = order.order_items[0]; // Assuming 1 item per order for this app
+        if (!item) return null;
+        
+        return {
+            userRewardId: order.id,
+            purchaseDate: formatDate(order.created_at),
+            status: order.status,
+            productName: item.products.name,
+            storeName: item.products.stores.name,
+            productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage()
+        };
+    }).filter(Boolean); // Filter out any null items
+
+    console.log('User rewards loaded:', state.userRewards);
+    if (document.getElementById('my-rewards').classList.contains('active')) {
+        renderMyRewardsPage();
+    }
+};
+
+/**
+ * Refreshes just the user's profile/points.
+ */
+const refreshUserData = async () => {
+     const { data: userProfile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', state.currentUser.id)
+        .single();
+    
+    if (error || !userProfile) {
+        console.error('Error refreshing user data:', error?.message);
+        return;
+    }
+    
+    state.currentUser = userProfile;
+    // Animate points update
+    animatePointsUpdate(userProfile.current_points);
+    // Re-render dashboard components that show points
+    renderDashboardUI();
+};
+
+
+// =========================================
+// 5. HELPER FUNCTIONS
+// =========================================
+
+const getPlaceholderImage = (size = '400x300', text = 'EcoBirla') => `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
+
+const getUserLevel = (points) => {
+    let current = state.levels[0];
+    for (let i = state.levels.length - 1; i >= 0; i--) {
+        if (points >= state.levels[i].minPoints) {
+            current = state.levels[i];
+            break;
+        }
+    }
+    const nextMin = current.nextMin || Infinity;
+    let progress = 0;
+    let progressText = "Max Level";
+    if (nextMin !== Infinity) {
+        const pointsInLevel = points - current.minPoints;
+        const range = nextMin - current.minPoints;
+        progress = Math.max(0, Math.min(100, (pointsInLevel / range) * 100));
+        progressText = `${points} / ${nextMin} Pts`;
+    }
+    return { ...current, progress, progressText };
+};
+
+const getProduct = (productId) => {
+    return state.products.find(p => p.id === productId);
+};
+
+const formatDate = (dateString, options = { year: 'numeric', month: 'short', day: 'numeric' }) => {
+    if (!dateString) return '...';
+    return new Date(dateString).toLocaleDateString('en-US', options);
+};
+
+const getIconForHistory = (type) => {
+    const icons = {
+        'checkin': 'calendar-check',
+        'event': 'calendar-check',
+        'challenge': 'award',
+        'plastic': 'recycle',
+        'order': 'shopping-cart',
+        'coupon': 'ticket'
+    };
+    return icons[type] || 'help-circle';
+};
+
+const getIconForChallenge = (type) => {
+    const icons = {
+        'quiz': 'brain',
+        'upload': 'camera',
+        'selfie': 'camera',
+        'spot': 'eye'
+    };
+    return icons[type] || 'award';
+};
+
+const getUserInitials = (fullName) => {
+    if (!fullName) return '..';
+    return fullName.split(' ').map(n => n[0]).join('').toUpperCase();
+};
+
+// DOM Cache
 const els = {
     pages: document.querySelectorAll('.page'),
     sidebar: document.getElementById('sidebar'),
@@ -51,335 +484,20 @@ const els = {
     purchaseModalOverlay: document.getElementById('purchase-modal-overlay'),
     purchaseModal: document.getElementById('purchase-modal'),
     qrModalOverlay: document.getElementById('qr-modal-overlay'),
-    qrModal: document.getElementById('qr-modal'),
-    appLoader: document.getElementById('app-loading'),
-    
-    // Sidebar elements
-    sidebarAvatar: document.getElementById('user-avatar-sidebar'),
-    sidebarName: document.getElementById('user-name-sidebar'),
-    sidebarLevel: document.getElementById('user-level-sidebar'),
-    sidebarPoints: document.getElementById('user-points-sidebar'),
-
-    // Profile page elements
-    profileAvatar: document.getElementById('profile-avatar'),
-    profileName: document.getElementById('profile-name'),
-    profileEmail: document.getElementById('profile-email'),
-    profileJoined: document.getElementById('profile-joined'),
-    profileLevelTitle: document.getElementById('profile-level-title'),
-    profileLevelNumber: document.getElementById('profile-level-number'),
-    profileLevelProgress: document.getElementById('profile-level-progress'),
-    profileLevelNext: document.getElementById('profile-level-next'),
-    profileStudentId: document.getElementById('profile-student-id'),
-    profileCourse: document.getElementById('profile-course'),
-    profileMobile: document.getElementById('profile-mobile'),
-    profileEmailPersonal: document.getElementById('profile-email-personal'),
+    qrModal: document.getElementById('qr-modal')
 };
 
 // =========================================
-// 4. AUTHENTICATION & INITIALIZATION
+// 6. NAVIGATION & UI
 // =========================================
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session) {
-        state.currentAuthUser = session.user;
-        await initializeApp(session.user);
-    } else {
-        // Hide loader if we redirect, though page usually reloads
-        window.location.href = 'login.html';
-    }
-});
-
-async function initializeApp(authUser) {
-    try {
-        console.log("Initializing app for user:", authUser.id);
-
-        // --- Fetch User Profile Safely ---
-        const { data: userProfile, error: profileError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('auth_user_id', authUser.id)
-            .single();
-
-        // FIX: Ensure fallback object has ALL required fields to prevent crashes
-        if (profileError || !userProfile) {
-            console.warn('User profile missing, using fallback.');
-            state.currentUser = {
-                id: authUser.id,
-                full_name: authUser.email?.split('@')[0] || "User",
-                current_points: 0,
-                lifetime_points: 0,
-                profile_img_url: null,
-                checkInStreak: 0,
-                isCheckedInToday: false,
-                joined_at: new Date().toISOString(), // CRITICAL FIX: Prevents Date error
-                student_id: 'N/A',
-                course: 'N/A',
-                mobile: 'N/A'
-            };
-        } else {
-            state.currentUser = {
-                ...userProfile,
-                checkInStreak: 0,
-                isCheckedInToday: false
-            };
-        }
-
-        const today = new Date().toISOString().split("T")[0];
-
-        // --- Safe Parallel Fetch ---
-        const [
-            leaderboardRes,
-            historyRes,
-            challengesRes,
-            challengeSubmissionsRes,
-            eventsRes,
-            eventAttendanceRes,
-            storesRes,
-            productsRes,
-            ordersRes,
-            streakRes,
-            checkinRes,
-            impactRes
-        ] = await Promise.allSettled([
-            supabase.from('users').select('id, full_name, course, lifetime_points, profile_img_url, tick_type').order('lifetime_points', { ascending: false }).limit(10),
-            supabase.from('points_ledger').select('*').eq('user_id', state.currentUser.id).order('created_at', { ascending: false }).limit(20),
-            supabase.from('challenges').select('*').eq('is_active', true),
-            supabase.from('challenge_submissions').select('challenge_id, status').eq('user_id', state.currentUser.id),
-            supabase.from('events').select('*').order('start_at', { ascending: true }),
-            supabase.from('event_attendance').select('event_id, status').eq('user_id', state.currentUser.id),
-            supabase.from('stores').select('*').eq('is_active', true),
-            supabase.from('products').select('*, product_images(*), product_features(*), product_specifications(*)').eq('is_active', true),
-            supabase.from('orders').select('*, order_items(*, products(*, product_images(image_url), stores(name)))').eq('user_id', state.currentUser.id).order('created_at', { ascending: false }),
-            supabase.from('user_streaks').select('*').eq('user_id', state.currentUser.id).single(),
-            supabase.from('daily_checkins').select('*').eq('user_id', state.currentUser.id).eq('checkin_date', today),
-            supabase.from('user_impact').select('*').eq('user_id', state.currentUser.id).single()
-        ]);
-
-        const safeData = (res, fallback = []) =>
-            (res && res.status === "fulfilled" && res.value && res.value.data) ? res.value.data : fallback;
-
-        // --- Assign State ---
-        state.leaderboard = safeData(leaderboardRes, []).map(u => ({
-            ...u,
-            name: u.full_name,
-            lifetimePoints: u.lifetime_points,
-            avatarUrl: u.profile_img_url,
-            isCurrentUser: u.id === state.currentUser.id,
-            initials: u.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-        }));
-
-        state.history = safeData(historyRes, []).map(mapHistory);
-        
-        const userSubmissions = safeData(challengeSubmissionsRes, []).reduce((acc, s) => { acc[s.challenge_id] = s.status; return acc; }, {});
-        state.dailyChallenges = safeData(challengesRes, []).map(c => mapChallenge(c, userSubmissions));
-
-        const userAttendance = safeData(eventAttendanceRes, []).reduce((acc, a) => { acc[a.event_id] = a.status; return acc; }, {});
-        state.events = safeData(eventsRes, []).map(e => mapEvent(e, userAttendance));
-
-        state.stores = safeData(storesRes, []);
-        state.products = safeData(productsRes, []).map(mapProduct);
-
-        state.userRewards = [];
-        safeData(ordersRes, []).forEach(order => {
-            order.order_items?.forEach(item => {
-                state.userRewards.push({
-                    userRewardId: item.id,
-                    orderId: order.id,
-                    productId: item.product_id,
-                    purchaseDate: new Date(order.created_at).toLocaleDateString('en-CA'),
-                    status: order.status,
-                    productName: item.products?.name,
-                    productImage: item.products?.product_images?.[0]?.image_url || 'https://placehold.co/100x100',
-                    storeName: item?.products?.stores?.name || "Unknown Store",
-                });
-            });
-        });
-
-        // Handle potentially missing single records
-        state.currentUser.checkInStreak = (streakRes?.status === 'fulfilled' && streakRes.value.data?.current_streak) || 0;
-        state.currentUser.isCheckedInToday = (checkinRes?.status === 'fulfilled' && checkinRes.value.data?.length > 0) || false;
-        state.userImpact = (impactRes?.status === 'fulfilled' && impactRes.value.data) ? impactRes.value.data : { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
-
-        // --- Render UI ---
-        setupEventListeners();
-        renderAllUI();
-
-        // --- Hide Loader ---
-        // Small delay to ensure DOM paint
-        setTimeout(() => {
-            els.appLoader.classList.add("loaded");
-        }, 500);
-
-        console.log("App initialized safely.");
-
-    } catch (error) {
-        console.error("Fatal app error:", error);
-        els.appLoader.innerHTML = `<p class="text-red-500 p-4 text-center">Error loading app.<br>${error.message}</p>`;
-    }
-}
-
-function renderAllUI() {
-    renderDashboard();
-    renderProfile();
-    showLeaderboardTab('student'); 
-    if(window.lucide) lucide.createIcons();
-}
-
-// =========================================
-// 5. DATA MAPPING HELPERS
-// =========================================
-
-const mapHistory = (h) => ({
-    type: h.source_type,
-    description: h.description,
-    points: h.points_delta,
-    date: new Date(h.created_at).toLocaleDateString('en-CA'), 
-    icon: {
-        'event': 'calendar-check',
-        'order': 'shopping-cart',
-        'challenge': 'award',
-        'plastic': 'recycle',
-        'checkin': 'calendar-check',
-        'coupon': 'ticket'
-    }[h.source_type] || 'star'
-});
-
-const mapChallenge = (c, submissions) => {
-    const userStatus = submissions[c.id];
-    let status = 'active';
-    let buttonText = c.type === 'quiz' ? 'Start Quiz' : 'Upload';
-    let action = c.type === 'quiz' ? `openEcoQuizModal('${c.id}')` : `openChallengeUpload('${c.id}')`;
-
-    if (userStatus === 'pending') {
-        status = 'pending';
-        buttonText = 'Pending Review';
-        action = null;
-    } else if (userStatus === 'approved') {
-        status = 'completed';
-        buttonText = 'Completed';
-        action = null;
-    } else if (userStatus === 'rejected') {
-        status = 'rejected';
-        buttonText = 'Try Again';
-    }
-
-    return {
-        id: c.id,
-        title: c.title,
-        description: c.description,
-        points_reward: c.points_reward,
-        icon: { 'upload': 'camera', 'quiz': 'brain', 'photo': 'eye', 'link': 'link' }[c.type] || 'award',
-        status: status,
-        buttonText: buttonText,
-        type: c.type,
-        action: action
-    };
-};
-
-const mapEvent = (e, attendance) => {
-    const userStatus = attendance[e.id];
-    let status = 'upcoming';
-    const now = new Date();
-    const eventEnd = e.end_at ? new Date(e.end_at) : new Date(e.start_at);
-
-    if (userStatus === 'confirmed') status = 'attended';
-    else if (userStatus === 'registered') status = 'registered';
-    else if (userStatus === 'absent') status = 'missed';
-    else if (now > eventEnd) status = 'missed';
-
-    return {
-        id: e.id,
-        title: e.title,
-        description: e.description,
-        date: new Date(e.start_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        points: e.points_reward,
-        status: status
-    };
-};
-
-const mapProduct = (p) => ({
-    productId: p.id,
-    storeId: p.store_id,
-    name: p.name,
-    images: (p.product_images || []).length > 0 ? p.product_images.map(img => img.image_url) : ['https://placehold.co/400x300/cccccc/FFFFFF?text=No+Image'],
-    description: p.description,
-    features: (p.product_features || []).map(f => f.feature),
-    specifications: (p.product_specifications || []).map(s => ({ key: s.spec_key, value: s.spec_value })),
-    originalPrice: p.original_price,
-    discountedPrice: p.discounted_price,
-    cost: p.ecopoints_cost,
-    popularity: p.metadata?.popularity || 0,
-});
-
-// =========================================
-// 6. CORE APP HELPERS
-// =========================================
-
-const getUserLevel = (points) => {
-    let current = state.levels[0];
-    for (let i = state.levels.length - 1; i >= 0; i--) {
-        if (points >= state.levels[i].minPoints) {
-            current = state.levels[i];
-            break;
-        }
-    }
-    const nextMin = current.nextMin || Infinity;
-    let progress = 0;
-    let progressText = "Max Level";
-    if (nextMin !== Infinity) {
-        const pointsInLevel = points - current.minPoints;
-        const range = nextMin - current.minPoints;
-        progress = Math.max(0, Math.min(100, (pointsInLevel / range) * 100));
-        progressText = `${points} / ${nextMin} Pts`;
-    }
-    return { ...current, progress, progressText };
-};
-
-const getAllProducts = () => {
-    return state.products.map(p => {
-        const store = state.stores.find(s => s.id === p.storeId);
-        return {
-            ...p,
-            storeName: store ? store.name : 'Unknown Store',
-            storeLogo: store ? store.logo_url : 'https://placehold.co/40x40'
-        };
-    });
-};
-
-const getProduct = (productId) => {
-    const product = state.products.find(p => p.productId === productId);
-    if (!product) return { store: null, product: null };
-    const store = state.stores.find(s => s.id === product.storeId);
-    return { store, product: {...product, storeName: store.name, storeLogo: store.logo_url } };
-};
-
-const animatePointsUpdate = (newPoints) => {
-    state.currentUser.current_points = newPoints;
-    els.userPointsHeader.classList.add('points-pulse');
-    els.userPointsHeader.textContent = newPoints;
-    setTimeout(() => els.userPointsHeader.classList.remove('points-pulse'), 400);
-    els.sidebarPoints.textContent = newPoints;
-    if(document.getElementById('ecopoints-balance')) document.getElementById('ecopoints-balance').textContent = newPoints;
-};
-
-async function refreshUserPoints() {
-    const { data } = await supabase.from('users').select('current_points, lifetime_points').eq('id', state.currentUser.id).single();
-    if (data) {
-        animatePointsUpdate(data.current_points);
-        state.currentUser.lifetime_points = data.lifetime_points;
-        renderProfile();
-    }
-}
-
-// =========================================
-// 7. NAVIGATION & UI
-// =========================================
-
-window.showPage = (pageId) => {
+const showPage = (pageId) => {
     els.pages.forEach(p => p.classList.remove('active'));
+    
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
+    // Clear detail pages when navigating away
     if (pageId !== 'store-detail-page' && pageId !== 'product-detail-page') {
         els.storeDetailPage.innerHTML = '';
         els.productDetailPage.innerHTML = '';
@@ -392,72 +510,105 @@ window.showPage = (pageId) => {
 
     document.querySelector('.main-content').scrollTop = 0;
 
-    switch (pageId) {
-        case 'dashboard': renderDashboard(); break;
-        case 'leaderboard': showLeaderboardTab(currentLeaderboardTab); break;
-        case 'rewards': renderRewards(); break;
-        case 'my-rewards': renderMyRewardsPage(); break;
-        case 'history': renderHistory(); break;
-        case 'ecopoints': renderEcoPointsPage(); break;
-        case 'challenges': renderChallengesPage(); break;
-        case 'events': renderEventsPage(); break;
-        case 'profile': renderProfile(); break;
+    // Load data or render if data is already loaded
+    if (pageId === 'dashboard') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderDashboard(); // Re-render from state
+    } else if (pageId === 'leaderboard') {
+        showLeaderboardTab(currentLeaderboardTab);
+    } else if (pageId === 'rewards') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderRewards();
+    } else if (pageId === 'my-rewards') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderMyRewardsPage();
+    } else if (pageId === 'history') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderHistory();
+    } else if (pageId === 'ecopoints') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderEcoPointsPage();
+    } else if (pageId === 'challenges') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderChallengesPage();
+    } else if (pageId === 'events') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderEventsPage();
+    } else if (pageId === 'profile') {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderProfile();
     }
-    
-    if (pageId !== 'leaderboard' && els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-    else if (pageId === 'leaderboard' && currentLeaderboardTab === 'student' && els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
+     else {
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+    }
 
     toggleSidebar(true);
-    if(window.lucide) lucide.createIcons();
+    lucide.createIcons();
 };
+window.showPage = showPage; // Expose to global scope for HTML onclick
 
-window.toggleSidebar = (forceClose = false) => {
+const toggleSidebar = (forceClose = false) => {
     if (forceClose) {
         els.sidebar.classList.add('-translate-x-full');
-        els.sidebarOverlay.classList.add('opacity-0', 'hidden');
-        els.sidebarOverlay.classList.remove('opacity-0', 'hidden'); // Logic fix: remove hidden if not closing
+        els.sidebarOverlay.classList.add('opacity-0');
         els.sidebarOverlay.classList.add('hidden');
     } else {
         els.sidebar.classList.toggle('-translate-x-full');
         els.sidebarOverlay.classList.toggle('hidden');
-        setTimeout(() => els.sidebarOverlay.classList.toggle('opacity-0'), 0);
+        els.sidebarOverlay.classList.toggle('opacity-0');
     }
+};
+window.toggleSidebar = toggleSidebar;
+
+const animatePointsUpdate = (newPoints) => {
+    els.userPointsHeader.classList.add('points-pulse');
+    els.userPointsHeader.textContent = newPoints;
+    document.getElementById('user-points-sidebar').textContent = newPoints;
+    setTimeout(() => els.userPointsHeader.classList.remove('points-pulse'), 400);
 };
 
 // =========================================
-// 8. PAGE RENDER FUNCTIONS
+// 7. RENDERING FUNCTIONS (Read from State)
 // =========================================
 
-function renderDashboard() {
-    const user = state.currentUser;
-    if(els.userPointsHeader) els.userPointsHeader.textContent = user.current_points;
-    if(els.userNameGreeting) els.userNameGreeting.textContent = user.full_name.split(' ')[0];
-    
-    if(els.sidebarName) els.sidebarName.textContent = user.full_name;
-    if(els.sidebarPoints) els.sidebarPoints.textContent = user.current_points;
-    const level = getUserLevel(user.lifetime_points);
-    if(els.sidebarLevel) els.sidebarLevel.textContent = level.title;
-    if(els.sidebarAvatar) els.sidebarAvatar.src = user.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
-
-    const impact = state.userImpact;
-    if(document.getElementById('impact-recycled')) document.getElementById('impact-recycled').textContent = `${(impact.total_plastic_kg || 0).toFixed(1)} kg`;
-    if(document.getElementById('impact-co2')) document.getElementById('impact-co2').textContent = `${(impact.co2_saved_kg || 0).toFixed(1)} kg`;
-    if(document.getElementById('impact-events')) document.getElementById('impact-events').textContent = impact.events_attended || 0;
-
-    const upcomingEvent = state.events.find(e => e.status === 'upcoming' || e.status === 'registered');
-    const eventCard = document.getElementById('dashboard-event-card');
-    if (upcomingEvent && eventCard) {
-        document.getElementById('dashboard-event-title').textContent = upcomingEvent.title;
-        document.getElementById('dashboard-event-desc').textContent = upcomingEvent.description.substring(0, 75) + '...';
-        eventCard.classList.remove('hidden');
-    } else if(eventCard) {
-        eventCard.classList.add('hidden');
-    }
+/**
+ * Renders all dashboard components from the state.
+ */
+const renderDashboard = () => {
+    if (!state.currentUser) return; // Guard clause
+    renderDashboardUI();
     renderCheckinButtonState();
-}
+};
 
-function renderCheckinButtonState() {
-    if(!els.dailyCheckinBtn) return;
+/**
+ * Renders only the UI elements, not the button state.
+ */
+const renderDashboardUI = () => {
+    const user = state.currentUser;
+    els.userPointsHeader.textContent = user.current_points;
+    els.userNameGreeting.textContent = user.full_name.split(' ')[0];
+    
+    // Sidebar
+    document.getElementById('user-name-sidebar').textContent = user.full_name;
+    document.getElementById('user-points-sidebar').textContent = user.current_points;
+    const level = getUserLevel(user.lifetime_points);
+    document.getElementById('user-level-sidebar').textContent = level.title;
+    document.getElementById('user-avatar-sidebar').src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
+
+    // Impact stats
+    document.getElementById('impact-recycled').textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
+    document.getElementById('impact-co2').textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
+    document.getElementById('impact-events').textContent = user.impact?.events_attended || 0;
+    
+    // Featured event
+    document.getElementById('dashboard-event-title').textContent = state.featuredEvent?.title || '...';
+    document.getElementById('dashboard-event-desc').textContent = state.featuredEvent?.description || '...';
+};
+
+/**
+ * Renders the check-in button state.
+ */
+const renderCheckinButtonState = () => {
     document.getElementById('dashboard-streak-text').textContent = `${state.currentUser.checkInStreak} Day Streak`;
     const btn = els.dailyCheckinBtn;
     const checkIcon = document.getElementById('checkin-check-icon');
@@ -465,410 +616,31 @@ function renderCheckinButtonState() {
     const doneText = document.getElementById('checkin-done-text');
 
     if (state.currentUser.isCheckedInToday) {
-        btn.classList.add('checkin-completed');
+        btn.classList.add('checkin-completed'); 
         btn.classList.remove('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
+        
         btn.querySelector('h3').textContent = "Check-in Complete";
-        if(subtext) subtext.style.display = 'none';
-        if(doneText) doneText.classList.remove('hidden');
-        if(checkIcon) checkIcon.classList.remove('hidden');
-        btn.onclick = null;
+        subtext.style.display = 'none';
+        doneText.classList.remove('hidden');
+        checkIcon.classList.remove('hidden');
+        
+        btn.onclick = null; 
     } else {
         btn.classList.remove('checkin-completed');
         btn.classList.add('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
+        
         btn.querySelector('h3').textContent = "Daily Check-in";
-        if(subtext) subtext.style.display = 'block';
-        if(doneText) doneText.classList.add('hidden');
-        if(checkIcon) checkIcon.classList.add('hidden');
+        subtext.style.display = 'block';
+        doneText.classList.add('hidden');
+        checkIcon.classList.add('hidden');
+        
         btn.onclick = openCheckinModal;
     }
-}
-
-function renderProfile() {
-    const u = state.currentUser;
-    const l = getUserLevel(u.lifetime_points);
-    
-    if(els.profileName) els.profileName.textContent = u.full_name;
-    if(els.profileEmail) els.profileEmail.textContent = u.email || u.id;
-    if(els.profileAvatar) els.profileAvatar.src = u.profile_img_url || 'https://placehold.co/80x80/cccccc/FFFFFF?text=USER';
-    
-    // SAFE DATE RENDERING FIX
-    if(els.profileJoined) {
-        try {
-            const dateStr = u.joined_at ? new Date(u.joined_at) : new Date();
-            els.profileJoined.textContent = 'Joined ' + (!isNaN(dateStr) ? dateStr.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently');
-        } catch(e) {
-             els.profileJoined.textContent = 'Joined recently';
-        }
-    }
-    
-    if(els.profileLevelTitle) els.profileLevelTitle.textContent = l.title;
-    if(els.profileLevelNumber) els.profileLevelNumber.textContent = l.level;
-    if(els.profileLevelProgress) els.profileLevelProgress.style.width = l.progress + '%';
-    if(els.profileLevelNext) els.profileLevelNext.textContent = l.progressText;
-    
-    if(els.profileStudentId) els.profileStudentId.textContent = u.student_id || 'N/A';
-    if(els.profileCourse) els.profileCourse.textContent = u.course || 'N/A';
-    if(els.profileMobile) els.profileMobile.textContent = u.mobile || 'Not set';
-    if(els.profileEmailPersonal) els.profileEmailPersonal.textContent = u.email || 'N/A';
-}
-
-let currentLeaderboardTab = 'student';
-window.showLeaderboardTab = (tab) => {
-    currentLeaderboardTab = tab;
-    const btnStudent = document.getElementById('leaderboard-tab-student');
-    const btnDept = document.getElementById('leaderboard-tab-dept');
-    const contentStudent = document.getElementById('leaderboard-content-student');
-    const contentDept = document.getElementById('leaderboard-content-department');
-
-    btnDept.classList.add('hidden');
-    tab = 'student'; // Force student for now
-
-    btnStudent.classList.add('active');
-    btnDept.classList.remove('active');
-    contentStudent.classList.remove('hidden');
-    contentDept.classList.add('hidden');
-    if(els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
-    renderStudentLeaderboard();
 };
 
-function renderStudentLeaderboard() {
-    const sorted = state.leaderboard;
-    if (sorted.length === 0) {
-        els.lbPodium.innerHTML = '<p class="text-center text-gray-500">No rankings yet.</p>';
-        return;
-    }
-    
-    const rank1 = sorted[0];
-    const rank2 = sorted.length > 1 ? sorted[1] : null;
-    const rank3 = sorted.length > 2 ? sorted[2] : null;
-    const rest = sorted.slice(3);
-
-    els.lbPodium.innerHTML = `
-        <div class="podium">
-            <div class="champ">
-                <div class="badge silver">${rank2 ? rank2.initials : 'N/A'}</div>
-                <div class="champ-name">${rank2 ? rank2.name : '-'}</div>
-                <div class="champ-points">${rank2 ? rank2.lifetimePoints : 0} pts</div>
-                <div class="rank">2nd</div>
-            </div>
-            <div class="champ">
-                <div class="badge gold">${rank1 ? rank1.initials : 'N/A'}</div>
-                <div class="champ-name">${rank1 ? rank1.name : '-'}</div>
-                <div class="champ-points">${rank1 ? rank1.lifetimePoints : 0} pts</div>
-                <div class="rank">1st</div>
-            </div>
-            <div class="champ">
-                <div class="badge bronze">${rank3 ? rank3.initials : 'N/A'}</div>
-                <div class="champ-name">${rank3 ? rank3.name : '-'}</div>
-                <div class="champ-points">${rank3 ? rank3.lifetimePoints : 0} pts</div>
-                <div class="rank">3rd</div>
-            </div>
-        </div>
-    `;
-
-    els.lbList.innerHTML = '';
-    rest.forEach((user) => {
-        els.lbList.innerHTML += `
-            <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
-                <div class="user">
-                    <div class="circle">${user.initials}</div>
-                    <div class="user-info">
-                        <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''}</strong>
-                        <span class="sub-class">${user.course || 'Student'}</span>
-                    </div>
-                </div>
-                <div class="points-display">${user.lifetimePoints} pts</div>
-            </div>
-        `;
-    });
-}
-
-function renderRewards() {
-    els.productGrid.innerHTML = '';
-    let products = getAllProducts();
-
-    const searchTerm = els.storeSearch.value.toLowerCase();
-    if(searchTerm.length > 0) {
-        products = products.filter(p => 
-            p.name.toLowerCase().includes(searchTerm) || 
-            p.storeName.toLowerCase().includes(searchTerm)
-        );
-    }
-    els.storeSearchClear.classList.toggle('hidden', !searchTerm);
-
-    const criteria = els.sortBy.value;
-    products.sort((a, b) => {
-        switch (criteria) {
-            case 'points-lh': return a.cost - b.cost;
-            case 'points-hl': return b.cost - a.cost;
-            case 'price-lh': return a.discountedPrice - b.discountedPrice;
-            case 'price-hl': return b.discountedPrice - a.discountedPrice;
-            case 'popularity': default: return b.popularity - a.popularity;
-        }
-    });
-
-    if (products.length === 0) {
-        els.productGrid.innerHTML = '<p class="text-center text-gray-500 col-span-2">No rewards found.</p>';
-        return;
-    }
-
-    products.forEach(p => {
-        els.productGrid.innerHTML += `
-            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer"
-                 onclick="showProductDetailPage('${p.productId}')">
-                <img src="${p.images[0].replace('400x300', '300x225')}" class="w-full h-40 object-cover" onerror="this.src='https://placehold.co/300x225/cccccc/FFFFFF?text=No+Image'">
-                <div class="p-3 flex flex-col flex-grow">
-                    <div class="flex items-center mb-1">
-                        <img src="${p.storeLogo.replace('100x100', '40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600" onerror="this.src='https://placehold.co/40x40'">
-                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400">${p.storeName}</p>
-                    </div>
-                    <p class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate mt-1">${p.name}</p>
-                    <div class="mt-auto pt-2">
-                        <p class="text-xs text-gray-400 dark:text-gray-500 line-through">₹${p.originalPrice}</p>
-                        <div class="flex items-center font-bold text-gray-800 dark:text-gray-100 my-1">
-                            <span class="text-md text-green-700 dark:text-green-400">₹${p.discountedPrice}</span>
-                            <span class="mx-1 text-gray-400 dark:text-gray-500 text-xs">+</span>
-                            <i data-lucide="leaf" class="w-3 h-3 text-green-500 mr-1"></i>
-                            <span class="text-sm text-green-700 dark:text-green-400">${p.cost}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    if(window.lucide) lucide.createIcons();
-}
-
-window.showProductDetailPage = (productId) => {
-    const { store, product } = getProduct(productId);
-    if (!product) return;
-
-    const images = product.images.length > 0 ? product.images : ['https://placehold.co/600x400/cccccc/FFFFFF?text=No+Image'];
-    let sliderImagesHTML = '';
-    let sliderDotsHTML = '';
-
-    images.forEach((img, index) => {
-        sliderImagesHTML += `
-            <img src="${img.replace('400x300', '600x400')}" class="slider-item w-full h-80 object-cover flex-shrink-0 rounded-3xl" data-index="${index}" onerror="this.src='https://placehold.co/600x400/cccccc/FFFFFF?text=No+Image'">
-        `;
-        sliderDotsHTML += `<button class="slider-dot w-2.5 h-2.5 rounded-full bg-white/60 dark:bg-gray-700/80 ${index === 0 ? 'active' : ''}"></button>`;
-    });
-
-    const featuresHTML = (product.features || []).map(f => `
-        <li class="flex items-start space-x-2">
-            <span class="mt-1 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
-                <i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i>
-            </span>
-            <span class="text-sm text-gray-700 dark:text-gray-300">${f}</span>
-        </li>
-    `).join('');
-
-    const canAfford = state.currentUser.current_points >= product.cost;
-
-    els.productDetailPage.innerHTML = `
-        <div class="pb-8">
-            <div class="relative">
-                <div class="slider-container flex w-full overflow-x-auto snap-x snap-mandatory gap-4 px-4 pt-4 pb-10">
-                    ${sliderImagesHTML}
-                </div>
-                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 glass-card rounded-full text-gray-700 dark:text-gray-200 !px-2 !py-2">
-                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
-                </button>
-                <div class="absolute bottom-5 left-0 right-0 flex justify-center items-center space-x-2 z-10">${sliderDotsHTML}</div>
-            </div>
-            <div class="px-4 -mt-6">
-                <div class="glass-card p-6 rounded-3xl">
-                    <div class="flex items-start justify-between gap-3 mb-2">
-                        <div>
-                            <h2 class="text-2xl font-extrabold text-gray-900 dark:text-gray-50">${product.name}</h2>
-                            <div class="flex items-center mt-2">
-                                <img src="${store.logo_url.replace('100x100', '40x40')}" class="w-7 h-7 rounded-full mr-2 border" onerror="this.src='https://placehold.co/40x40'">
-                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">${store.name}</p>
-                            </div>
-                        </div>
-                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200">
-                            ${product.cost} EcoPts
-                        </span>
-                    </div>
-                    <div class="mt-4 space-y-5">
-                        <div>
-                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> Description</h3>
-                            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">${product.description}</p>
-                        </div>
-                        ${featuresHTML ? `<div><h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> Highlights</h3><ul class="mt-2 space-y-2">${featuresHTML}</ul></div>` : ''}
-                        <div class="pt-4 mt-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
-                            <div>
-                                <p class="text-xs text-gray-500 line-through">₹${product.originalPrice}</p>
-                                <div class="flex items-center font-bold text-gray-800 dark:text-gray-100">
-                                    <span class="text-xl text-emerald-700 dark:text-emerald-400">₹${product.discountedPrice}</span>
-                                    <span class="mx-2 text-gray-400 text-sm">+</span>
-                                    <i data-lucide="leaf" class="w-4 h-4 text-emerald-500 mr-1"></i>
-                                    <span class="text-xl text-emerald-700">${product.cost}</span>
-                                </div>
-                            </div>
-                            <button onclick="openPurchaseModal('${product.productId}')" class="btn-eco-gradient text-white text-sm font-semibold py-3 px-5 rounded-xl flex-shrink-0 ${canAfford ? '' : 'opacity-60 cursor-not-allowed'}">
-                                ${canAfford ? 'Redeem Offer' : 'Not enough points'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-    els.pages.forEach(p => p.classList.remove('active'));
-    els.productDetailPage.classList.add('active');
-    document.querySelector('.main-content').scrollTop = 0;
-    if(window.lucide) lucide.createIcons();
-};
-
-function renderMyRewardsPage() {
-    els.allRewardsList.innerHTML = '';
-    if (!state.userRewards.length) {
-        els.allRewardsList.innerHTML = `<p class="text-sm text-center text-gray-500">You haven't purchased any rewards yet.</p>`;
-        return;
-    }
-    state.userRewards.forEach(ur => {
-        const isUsed = ur.status === 'confirmed';
-        const isCancelled = ur.status === 'cancelled';
-        let buttonHTML = `<button onclick="openRewardQrModal('${ur.userRewardId}')" class="text-xs font-semibold px-3 py-2 rounded-full bg-emerald-600 text-white">View QR</button>`;
-        if (isUsed) buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">Used</span>`;
-        else if (isCancelled) buttonHTML = `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300">Cancelled</span>`;
-
-        els.allRewardsList.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl flex items-center justify-between ${isUsed || isCancelled ? 'opacity-60' : ''}">
-                <div class="flex items-center">
-                    <img src="${ur.productImage}" class="w-14 h-14 rounded-lg object-cover mr-3" onerror="this.src='https://placehold.co/100x100'">
-                    <div>
-                        <p class="text-sm font-bold text-gray-900 dark:text-gray-100">${ur.productName}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">From ${ur.storeName}</p>
-                        <p class="text-xs text-gray-400 mt-1">Purchased: ${ur.purchaseDate}</p>
-                    </div>
-                </div>
-                ${buttonHTML}
-            </div>
-        `;
-    });
-}
-
-function renderHistory() {
-    els.historyList.innerHTML = '';
-    if (state.history.length === 0) {
-        els.historyList.innerHTML = '<p class="text-center text-gray-500">No activity yet.</p>';
-        return;
-    }
-    state.history.forEach(h => {
-        els.historyList.innerHTML += `
-            <div class="glass-card p-3 rounded-xl flex items-center justify-between">
-                <div class="flex items-center">
-                    <span class="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mr-3">
-                        <i data-lucide="${h.icon}" class="w-5 h-5 text-gray-700 dark:text-gray-200"></i>
-                    </span>
-                    <div>
-                        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">${h.description}</p>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${h.date}</p>
-                    </div>
-                </div>
-                <span class="text-sm font-bold ${h.points >= 0 ? 'text-green-600' : 'text-red-500'}">
-                    ${h.points > 0 ? '+' : ''}${h.points}
-                </span>
-            </div>
-        `;
-    });
-    if(window.lucide) lucide.createIcons();
-}
-
-function renderChallengesPage() {
-    els.challengesList.innerHTML = '';
-    if (state.dailyChallenges.length === 0) {
-        els.challengesList.innerHTML = '<p class="text-center text-gray-500">No challenges available right now.</p>';
-        return;
-    }
-    state.dailyChallenges.forEach(c => {
-        let buttonHTML = '';
-        if (c.status === 'active') buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white">${c.buttonText}</button>`;
-        else if (c.status === 'pending') buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 cursor-not-allowed">Pending Review</button>`;
-        else if (c.status === 'completed') buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-not-allowed">Completed</button>`;
-        else if (c.status === 'rejected') buttonHTML = `<button onclick="${c.action}" class="text-xs font-semibold px-3 py-2 rounded-full bg-red-100 text-red-700">${c.buttonText}</button>`;
-        
-        els.challengesList.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl flex items-start">
-                <div class="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/40 flex items-center justify-center mr-3">
-                    <i data-lucide="${c.icon}" class="w-5 h-5 text-green-600 dark:text-green-300"></i>
-                </div>
-                <div class="flex-1">
-                    <h3 class="font-bold text-gray-900 dark:text-gray-100">${c.title}</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${c.description}</p>
-                    <div class="flex items-center justify-between mt-3">
-                        <span class="text-xs font-semibold text-green-700 dark:text-green-300">+${c.points_reward} pts</span>
-                        ${buttonHTML}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    if(window.lucide) lucide.createIcons();
-}
-
-function renderEventsPage() {
-    els.eventsList.innerHTML = '';
-     if (state.events.length === 0) {
-        els.eventsList.innerHTML = '<p class="text-center text-gray-500">No events scheduled right now.</p>';
-        return;
-    }
-    state.events.forEach(e => {
-        let statusButton = '';
-        if (e.status === 'upcoming') statusButton = `<button onclick="handleEventRSVP('${e.id}')" class="w-full bg-green-600 text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center space-x-2"><i data-lucide="ticket" class="w-4 h-4"></i><span>RSVP +${e.points} pts</span></button>`;
-        else if (e.status === 'registered') statusButton = `<div class="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check" class="w-4 h-4"></i><span>Registered</span></div>`;
-        else if (e.status === 'attended') statusButton = `<div class="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check-circle" class="w-4 h-4"></i><span>Attended (+${e.points} pts)</span></div>`;
-        else statusButton = `<div class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="x-circle" class="w-4 h-4"></i><span>Missed</span></div>`;
-        
-        els.eventsList.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl ${e.status === 'missed' ? 'opacity-60' : ''}">
-                <div class="flex items-start">
-                    <div class="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg mr-4"><i data-lucide="calendar" class="w-6 h-6 text-purple-600 dark:text-purple-400"></i></div>
-                    <div class="flex-grow">
-                        <p class="text-xs font-semibold text-purple-600 dark:text-purple-400">${e.date}</p>
-                        <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">${e.title}</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">${e.description}</p>
-                        ${statusButton}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    if(window.lucide) lucide.createIcons();
-}
-
-function renderEcoPointsPage() {
-    const u = state.currentUser;
-    const l = getUserLevel(u.lifetime_points);
-    document.getElementById('ecopoints-balance').textContent = u.current_points;
-    document.getElementById('ecopoints-level-title').textContent = l.title;
-    document.getElementById('ecopoints-level-number').textContent = l.level;
-    document.getElementById('ecopoints-level-progress').style.width = l.progress + '%';
-    document.getElementById('ecopoints-level-next').textContent = l.progressText;
-    
-    const actContainer = document.getElementById('ecopoints-recent-activity');
-    actContainer.innerHTML = '';
-    state.history.slice(0,4).forEach(h => {
-        actContainer.innerHTML += `<div class="flex items-center justify-between text-sm"><div class="flex items-center"><span class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mr-3"><i data-lucide="${h.icon}" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></span><div><p class="font-semibold text-gray-800 dark:text-gray-100">${h.description}</p><p class="text-xs text-gray-500 dark:text-gray-400">${h.date}</p></div></div><span class="font-bold ${h.points >= 0 ? 'text-green-600' : 'text-red-500'}">${h.points > 0 ? '+' : ''}${h.points}</span></div>`;
-    });
-    
-    const levelsContainer = document.getElementById('all-levels-list');
-    levelsContainer.innerHTML = '';
-    state.levels.forEach(lvl => {
-         levelsContainer.innerHTML += `<div class="flex items-center"><span class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center mr-3 text-sm font-bold text-green-600 dark:text-green-300">${lvl.level}</span><div><p class="text-sm font-bold text-gray-800 dark:text-gray-100">${lvl.title}</p><p class="text-xs text-gray-500 dark:text-gray-400">${lvl.minPoints} pts required</p></div></div>`;
-    });
-    if(window.lucide) lucide.createIcons();
-}
-
-// =========================================
-// 9. MODAL & ACTION HANDLERS
-// =========================================
-
-const checkinModal = document.getElementById('checkin-modal');
-window.openCheckinModal = () => {
+const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
+    const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.add('open');
     checkinModal.classList.remove('invisible');
     
@@ -892,40 +664,211 @@ window.openCheckinModal = () => {
         </button>
     `;
 };
+window.openCheckinModal = openCheckinModal;
 
-window.closeCheckinModal = () => {
+const closeCheckinModal = () => {
+    const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.remove('open');
     setTimeout(() => checkinModal.classList.add('invisible'), 300);
 };
+window.closeCheckinModal = closeCheckinModal;
 
-window.handleDailyCheckin = async () => {
-    const { data: checkin, error } = await supabase
+/**
+ * Handles the daily check-in logic.
+ */
+const handleDailyCheckin = async () => {
+    const checkinButton = document.querySelector('#checkin-modal-button-container button');
+    checkinButton.disabled = true;
+    checkinButton.textContent = 'Checking in...';
+
+    // The database trigger 'trg_daily_checkins_before_insert' will handle
+    // streak logic and 'points_ledger' insertion.
+    const { error } = await supabase
         .from('daily_checkins')
-        .insert({ user_id: state.currentUser.id, points_awarded: state.checkInReward })
-        .select().single();
+        .insert({ 
+            user_id: state.currentUser.id, 
+            points_awarded: state.checkInReward 
+        });
 
     if (error) {
-        console.error('Check-in error:', error);
-        alert('You have already checked in today.');
-        closeCheckinModal();
+        console.error('Check-in error:', error.message);
+        alert(`Failed to check in: ${error.message}`);
+        checkinButton.disabled = false;
+        checkinButton.textContent = `Check-in & Earn ${state.checkInReward} Points`;
         return;
     }
 
-    if (checkin) {
-        const { data: user } = await supabase.from('users').select('current_points').eq('id', state.currentUser.id).single();
-        const { data: streak } = await supabase.from('user_streaks').select('current_streak').eq('user_id', state.currentUser.id).single();
-
-        animatePointsUpdate(user.current_points);
-        state.currentUser.isCheckedInToday = true;
-        state.currentUser.checkInStreak = streak.current_streak;
-        closeCheckinModal();
-        renderDashboard();
-    }
+    // Success
+    state.currentUser.isCheckedInToday = true;
+    
+    closeCheckinModal();
+    // Refresh user data (points, streak) and re-render dashboard
+    await Promise.all([
+        refreshUserData(),
+        loadDashboardData() // To get new streak
+    ]);
+    renderCheckinButtonState();
 };
+window.handleDailyCheckin = handleDailyCheckin;
 
-window.openPurchaseModal = (productId) => {
-    const { store, product } = getProduct(productId);
+
+// =========================================
+// 8. ECO-STORE (REWARDS)
+// =========================================
+
+const renderRewards = () => {
+    els.productGrid.innerHTML = '';
+    let products = [...state.products];
+
+    if (products.length === 0) {
+        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2">Loading rewards...</p>`;
+        return;
+    }
+
+    const searchTerm = els.storeSearch.value.toLowerCase();
+    if(searchTerm.length > 0) {
+        products = products.filter(p => 
+            p.name.toLowerCase().includes(searchTerm) || 
+            p.storeName.toLowerCase().includes(searchTerm)
+        );
+    }
+    els.storeSearchClear.classList.toggle('hidden', !searchTerm);
+
+    const criteria = els.sortBy.value;
+    products.sort((a, b) => {
+        switch (criteria) {
+            case 'points-lh': return a.ecopoints_cost - b.ecopoints_cost;
+            case 'points-hl': return b.ecopoints_cost - a.ecopoints_cost;
+            case 'price-lh': return a.discounted_price - b.discounted_price;
+            case 'price-hl': return b.discounted_price - a.discounted_price;
+            case 'popularity': default: return b.popularity - a.popularity;
+        }
+    });
+    
+    if (products.length === 0) {
+        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2">No rewards found for "${searchTerm}".</p>`;
+        return;
+    }
+
+    products.forEach(p => {
+        const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
+        
+        els.productGrid.innerHTML += `
+            <div class.="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer"
+                 onclick="showProductDetailPage('${p.id}')">
+                <img src="${imageUrl}" class="w-full h-40 object-cover" onerror="this.src='${getPlaceholderImage('300x225')}'">
+                <div class="p-3 flex flex-col flex-grow">
+                    <div class="flex items-center mb-1">
+                        <img src="${p.storeLogo || getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600" onerror="this.src='${getPlaceholderImage('40x40')}'">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400">${p.storeName}</p>
+                    </div>
+                    <p class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate mt-1">${p.name}</p>
+                    <div class="mt-auto pt-2">
+                        <p class="text-xs text-gray-400 dark:text-gray-500 line-through">₹${p.original_price}</p>
+                        <div class="flex items-center font-bold text-gray-800 dark:text-gray-100 my-1">
+                            <span class="text-md text-green-700 dark:text-green-400">₹${p.discounted_price}</span>
+                            <span class="mx-1 text-gray-400 dark:text-gray-500 text-xs">+</span>
+                            <i data-lucide="leaf" class="w-3 h-3 text-green-500 mr-1"></i>
+                            <span class="text-sm text-green-700 dark:text-green-400">${p.ecopoints_cost}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    lucide.createIcons();
+};
+window.renderRewards = renderRewards; // Expose for listeners
+
+const showProductDetailPage = (productId) => {
+    const product = getProduct(productId);
     if (!product) return;
+
+    const images = (product.images && product.images.length > 0) ? product.images : [getPlaceholderImage()];
+    let sliderImagesHTML = '';
+    let sliderDotsHTML = '';
+
+    images.forEach((img, index) => {
+        sliderImagesHTML += `
+            <img src="${img}" class="slider-item w-full h-80 object-cover flex-shrink-0 rounded-3xl" data-index="${index}" onerror="this.src='${getPlaceholderImage('600x400')}'">
+        `;
+        sliderDotsHTML += `<button class="slider-dot w-2.5 h-2.5 rounded-full bg-white/60 dark:bg-gray-700/80 ${index === 0 ? 'active' : ''}"></button>`;
+    });
+
+    const featuresHTML = (product.features || []).map(f => `
+        <li class="flex items-start space-x-2">
+            <span class="mt-1 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
+                <i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i>
+            </span>
+            <span class="text-sm text-gray-700 dark:text-gray-300">${f}</span>
+        </li>
+    `).join('');
+
+    const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
+
+    els.productDetailPage.innerHTML = `
+        <div class="pb-8">
+            <div class="relative">
+                <div class="slider-container flex w-full overflow-x-auto snap-x snap-mandatory gap-4 px-4 pt-4 pb-10">
+                    ${sliderImagesHTML}
+                </div>
+                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 glass-card rounded-full text-gray-700 dark:text-gray-200 !px-2 !py-2">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </button>
+                <div class="absolute bottom-5 left-0 right-0 flex justify-center items-center space-x-2 z-10">${sliderDotsHTML}</div>
+            </div>
+            <div class="px-4 -mt-6">
+                <div class="glass-card p-6 rounded-3xl">
+                    <div class="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                            <h2 class="text-2xl font-extrabold text-gray-900 dark:text-gray-50">${product.name}</h2>
+                            <div class="flex items-center mt-2">
+                                <img src="${product.storeLogo || getPlaceholderImage('40x40')}" class="w-7 h-7 rounded-full mr-2 border" onerror="this.src='${getPlaceholderImage('40x40')}'">
+                                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">${product.storeName}</p>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200">
+                            ${product.ecopoints_cost} EcoPts
+                        </span>
+                    </div>
+                    <div class="mt-4 space-y-5">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4"></i> Description</h3>
+                            <p class="mt-1 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">${product.description}</p>
+                        </div>
+                        ${featuresHTML ? `<div><h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> Highlights</h3><ul class="mt-2 space-y-2">${featuresHTML}</ul></div>` : ''}
+                        <div class="pt-4 mt-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+                            <div>
+                                <p class="text-xs text-gray-500 line-through">₹${product.original_price}</p>
+                                <div class="flex items-center font-bold text-gray-800 dark:text-gray-100">
+                                    <span class="text-xl text-emerald-700 dark:text-emerald-400">₹${product.discounted_price}</span>
+                                    <span class="mx-2 text-gray-400 text-sm">+</span>
+                                    <i data-lucide="leaf" class="w-4 h-4 text-emerald-500 mr-1"></i>
+                                    <span class="text-xl text-emerald-700">${product.ecopoints_cost}</span>
+                                </div>
+                            </div>
+                            <button onclick="openPurchaseModal('${product.id}')" class="btn-eco-gradient text-white text-sm font-semibold py-3 px-5 rounded-xl flex-shrink-0 ${canAfford ? '' : 'opacity-60 cursor-not-allowed'}" ${canAfford ? '' : 'disabled'}>
+                                ${canAfford ? 'Redeem Offer' : 'Not enough points'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    els.pages.forEach(p => p.classList.remove('active'));
+    els.productDetailPage.classList.add('active');
+    document.querySelector('.main-content').scrollTop = 0;
+    lucide.createIcons();
+};
+window.showProductDetailPage = showProductDetailPage;
+
+const openPurchaseModal = (productId) => {
+    const product = getProduct(productId);
+    if (!product) return;
+
+    const imageUrl = (product.images && product.images[0]) ? product.images[0] : getPlaceholderImage('100x100');
 
     els.purchaseModal.innerHTML = `
         <div class="flex justify-between items-center mb-4">
@@ -933,393 +876,652 @@ window.openPurchaseModal = (productId) => {
             <button onclick="closePurchaseModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
         <div class="flex items-center mb-4">
-            <img src="${product.images[0].replace('400x300', '100x100')}" class="w-20 h-20 object-cover rounded-lg mr-4" onerror="this.src='https://placehold.co/100x100'">
+            <img src="${imageUrl}" class="w-20 h-20 object-cover rounded-lg mr-4" onerror="this.src='${getPlaceholderImage('100x100')}'">
             <div>
                 <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100">${product.name}</h4>
-                <p class="text-sm text-gray-500 mb-2">From ${store.name}</p>
+                <p class="text-sm text-gray-500 mb-2">From ${product.storeName}</p>
                 <div class="flex items-center font-bold text-gray-800 dark:text-gray-100">
-                    <span class="text-lg text-green-700 dark:text-green-400">₹${product.discountedPrice}</span>
+                    <span class="text-lg text-green-700 dark:text-green-400">₹${product.discounted_price}</span>
                     <span class="mx-1 text-gray-400">+</span>
                     <i data-lucide="leaf" class="w-4 h-4 text-green-500 mr-1"></i>
-                    <span class="text-lg text-green-700">${product.cost}</span>
+                    <span class="text-lg text-green-700">${product.ecopoints_cost}</span>
                 </div>
             </div>
         </div>
-        <button id="confirm-purchase-btn" onclick="confirmPurchase('${product.productId}')" class="w-full btn-eco-gradient text-white font-bold py-3 px-4 rounded-lg mb-2">Confirm Purchase</button>
+        <button id="confirm-purchase-btn" onclick="confirmPurchase('${product.id}')" class="w-full btn-eco-gradient text-white font-bold py-3 px-4 rounded-lg mb-2">Confirm Purchase</button>
         <button onclick="closePurchaseModal()" class="w-full bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3 px-4 rounded-lg">Cancel</button>
     `;
     
     els.purchaseModalOverlay.classList.remove('hidden');
     setTimeout(() => els.purchaseModal.classList.remove('translate-y-full'), 10);
-    if(window.lucide) lucide.createIcons();
+    lucide.createIcons();
 };
+window.openPurchaseModal = openPurchaseModal;
 
-window.closePurchaseModal = () => {
+const closePurchaseModal = () => {
     els.purchaseModal.classList.add('translate-y-full');
     setTimeout(() => els.purchaseModalOverlay.classList.add('hidden'), 300);
 };
+window.closePurchaseModal = closePurchaseModal;
 
-window.confirmPurchase = async (productId) => {
-    const btn = document.getElementById('confirm-purchase-btn');
-    btn.disabled = true;
-    btn.textContent = 'Processing...';
-
-    const { product } = getProduct(productId);
-    if (!product || state.currentUser.current_points < product.cost) {
-        alert('You do not have enough points for this item.');
-        btn.disabled = false;
-        btn.textContent = 'Confirm Purchase';
+const confirmPurchase = async (productId) => {
+    const product = getProduct(productId);
+    if (!product || state.currentUser.current_points < product.ecopoints_cost) {
+        alert("You do not have enough points for this item.");
         return;
     }
 
-    const { data: order, error: orderError } = await supabase
+    const confirmBtn = document.getElementById('confirm-purchase-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Processing...';
+
+    // 1. Create the order
+    const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({ 
             user_id: state.currentUser.id, 
-            store_id: product.storeId, 
-            status: 'confirmed', 
-            total_points: product.cost, 
-            total_price: product.discountedPrice,
-            requires_approval: false, 
-            approved_by: state.currentUser.id 
+            store_id: product.store_id, 
+            status: 'pending', // Will be updated to 'confirmed'
+            total_points: product.ecopoints_cost,
+            total_price: product.discounted_price,
+            requires_approval: false // Or true, depending on product
         })
-        .select().single();
+        .select()
+        .single();
 
     if (orderError) {
-        console.error('Order error:', orderError);
-        alert('There was an error creating your order.');
-        btn.disabled = false;
-        btn.textContent = 'Confirm Purchase';
+        console.error('Error creating order:', orderError.message);
+        alert(`Purchase failed: ${orderError.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Purchase';
         return;
     }
 
-    await supabase.from('order_items').insert({ 
-        order_id: order.id, product_id: product.productId, quantity: 1, price_each: product.discountedPrice, points_each: product.cost 
-    });
+    // 2. Add item to the order
+    const { error: itemError } = await supabase
+        .from('order_items')
+        .insert({ 
+            order_id: orderData.id, 
+            product_id: product.id, 
+            quantity: 1,
+            price_each: product.discounted_price,
+            points_each: product.ecopoints_cost
+        });
+        
+    if (itemError) {
+        console.error('Error adding order item:', itemError.message);
+        // TODO: Add logic to cancel the order if this fails
+        alert(`Purchase failed: ${itemError.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Purchase';
+        return;
+    }
+    
+    // 3. Confirm the order (this will fire the trigger 'trg_orders_after_update' to deduct points)
+    const { error: confirmError } = await supabase
+        .from('orders')
+        .update({ status: 'confirmed' })
+        .eq('id', orderData.id);
 
-    await refreshUserPoints();
-    await loadMyRewards();
+    if (confirmError) {
+        console.error('Error confirming order:', confirmError.message);
+        alert(`Purchase failed: ${confirmError.message}`);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm Purchase';
+        return;
+    }
+    
+    // 4. Success! Refresh data and UI
     closePurchaseModal();
+    await Promise.all([
+        refreshUserData(), // Get new points total
+        loadUserRewardsData() // Get new list of orders
+    ]);
     showPage('my-rewards');
 };
+window.confirmPurchase = confirmPurchase;
 
-window.openRewardQrModal = (userRewardId) => {
-    const reward = state.userRewards.find(r => r.userRewardId === userRewardId);
-    if (!reward) return;
+// =========================================
+// 9. MY ORDERS & HISTORY
+// =========================================
+
+const renderMyRewardsPage = () => {
+    els.allRewardsList.innerHTML = '';
+    if (state.userRewards.length === 0) {
+        els.allRewardsList.innerHTML = `<p class="text-sm text-center text-gray-500">You haven't purchased any rewards yet. Visit the Store to redeem your points!</p>`;
+        return;
+    }
     
-    const qrData = reward.orderId; 
+    state.userRewards.forEach(ur => {
+        els.allRewardsList.innerHTML += `
+            <div class="glass-card p-4 rounded-2xl flex items-center justify-between">
+                <div class="flex items-center">
+                    <img src="${ur.productImage}" class="w-14 h-14 rounded-lg object-cover mr-3" onerror="this.src='${getPlaceholderImage('100x100')}'">
+                    <div>
+                        <p class="text-sm font-bold text-gray-900 dark:text-gray-100">${ur.productName}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">From ${ur.storeName}</p>
+                        <p class="text-xs text-gray-400 mt-1">${ur.purchaseDate}</p>
+                    </div>
+                </div>
+                ${ur.status === 'confirmed'
+                    ? `<button onclick="openRewardQrModal('${ur.userRewardId}')" class="text-xs font-semibold px-3 py-2 rounded-full bg-emerald-600 text-white">View QR</button>`
+                    : `<span class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 text-gray-600">${ur.status}</span>`
+                }
+            </div>
+        `;
+    });
+};
+
+const openRewardQrModal = (userRewardId) => {
+    const ur = state.userRewards.find(r => r.userRewardId === userRewardId);
+    if (!ur) return;
+    
+    // Generate a unique QR code value
+    const qrValue = `ecobirla-order:${userRewardId}-user:${state.currentUser.id}`;
     
     els.qrModal.innerHTML = `
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">Reward QR</h3>
             <button onclick="closeQrModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
-        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${reward.storeName}</strong> to redeem <strong>${reward.productName}</strong>.</p>
+        <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${ur.storeName}</strong> to redeem <strong>${ur.productName}</strong>.</p>
         <div class="flex justify-center mb-4">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}" class="rounded-lg border">
+            <!-- Using a placeholder, but you would replace this with a QR library -->
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrValue)}" class="rounded-lg border">
         </div>
-        <p class="text-center text-xs text-gray-400 mb-2">Order ID: ${reward.orderId}</p>
         <button onclick="closeQrModal()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg">Close</button>
     `;
     els.qrModalOverlay.classList.remove('hidden');
     setTimeout(() => els.qrModal.classList.remove('translate-y-full'), 10);
-    if(window.lucide) lucide.createIcons();
+    lucide.createIcons();
 };
+window.openRewardQrModal = openRewardQrModal;
 
-window.closeQrModal = () => {
+const closeQrModal = () => {
     els.qrModal.classList.add('translate-y-full');
     setTimeout(() => els.qrModalOverlay.classList.add('hidden'), 300);
 };
+window.closeQrModal = closeQrModal;
 
-const chatbotModal = document.getElementById('chatbot-modal');
-window.openChatbotModal = () => {
-    chatbotModal.classList.add('open');
-    chatbotModal.classList.remove('invisible');
-};
-window.closeChatbotModal = () => {
-    chatbotModal.classList.remove('open');
-    setTimeout(() => chatbotModal.classList.add('invisible'), 300);
-};
-
-const quizModal = document.getElementById('eco-quiz-modal');
-window.openEcoQuizModal = (challengeId) => {
-    document.getElementById('eco-quiz-modal-body').innerHTML = `
-        <p id="eco-quiz-modal-question" class="text-lg text-gray-700 dark:text-gray-200 mb-4">What does 'composting' primarily help reduce?</p>
-        <div id="eco-quiz-modal-options" class="space-y-3">
-            <button onclick="handleQuizAnswer(false, '${challengeId}')" class="w-full text-left p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">Plastic waste</button>
-            <button onclick="handleQuizAnswer(true, '${challengeId}')" class="w-full text-left p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">Landfill methane</button>
-            <button onclick="handleQuizAnswer(false, '${challengeId}')" class="w-full text-left p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">Water usage</button>
-        </div>
-        <div id="eco-quiz-modal-result" class="hidden text-center mt-4"></div>
-    `;
-    quizModal.classList.add('open');
-    quizModal.classList.remove('invisible');
-};
-window.closeEcoQuizModal = () => {
-    quizModal.classList.remove('open');
-    setTimeout(() => quizModal.classList.add('invisible'), 300);
-};
-window.handleQuizAnswer = async (isCorrect, challengeId) => {
-    const resultDiv = document.getElementById('eco-quiz-modal-result');
-    document.getElementById('eco-quiz-modal-options').classList.add('hidden');
-    resultDiv.classList.remove('hidden');
-
-    if (isCorrect) {
-        const { data: sub, error: insError } = await supabase
-            .from('challenge_submissions')
-            .insert({ challenge_id: challengeId, user_id: state.currentUser.id, status: 'pending' })
-            .select().single();
-
-        if (insError) {
-             resultDiv.innerHTML = `<p class="font-bold text-yellow-600">You already completed this!</p>`;
-             setTimeout(closeEcoQuizModal, 1500);
-             return;
-        }
-
-        if (sub) {
-            const { data: updatedSub } = await supabase
-                .from('challenge_submissions')
-                .update({ status: 'approved', admin_id: state.currentUser.id }) 
-                .eq('id', sub.id)
-                .select().single();
-            
-            if (updatedSub) {
-                const challenge = state.dailyChallenges.find(c => c.id === challengeId);
-                resultDiv.innerHTML = `<p class="font-bold text-green-600">Correct! +${challenge.points_reward} Points!</p>`;
-                await refreshUserPoints();
-                challenge.status = 'completed';
-                renderChallengesPage();
-            }
-        }
-    } else {
-        resultDiv.innerHTML = `<p class="font-bold text-red-500">Not quite. Try again tomorrow!</p>`;
+const renderHistory = () => {
+    els.historyList.innerHTML = '';
+    
+    if (state.history.length === 0) {
+        els.historyList.innerHTML = `<p class="text-sm text-center text-gray-500">No activity history yet. Start participating in challenges to earn points!</p>`;
+        return;
     }
-    setTimeout(closeEcoQuizModal, 1500);
+    
+    state.history.forEach(h => {
+        els.historyList.innerHTML += `
+            <div class="glass-card p-3 rounded-xl flex items-center justify-between">
+                <div class="flex items-center">
+                    <span class="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mr-3">
+                        <i data-lucide="${h.icon}" class="w-5 h-5 text-gray-700 dark:text-gray-200"></i>
+                    </span>
+                    <div>
+                        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">${h.description}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${h.date}</p>
+                    </div>
+                </div>
+                <span class="text-sm font-bold ${h.points >= 0 ? 'text-green-600' : 'text-red-500'}">
+                    ${h.points > 0 ? '+' : ''}${h.points}
+                </span>
+            </div>
+        `;
+    });
+    lucide.createIcons();
 };
 
-let currentCameraStream = null;
-let currentChallengeIdForUpload = null;
+// =========================================
+// 10. CHALLENGES & EVENTS
+// =========================================
 
-window.openChallengeUpload = (challengeId) => {
-    const challenge = state.dailyChallenges.find(c => c.id === challengeId);
-    if (!challenge) return;
+const renderChallengesPage = () => {
+    els.challengesList.innerHTML = '';
     
-    currentChallengeIdForUpload = challengeId;
-    const fileInput = document.getElementById('challenge-file-input');
-    fileInput.onchange = handleChallengeFileSelect;
-    fileInput.click();
+    if (state.dailyChallenges.length === 0) {
+        els.challengesList.innerHTML = `<p class="text-sm text-center text-gray-500">No active challenges right now. Check back later!</p>`;
+        return;
+    }
+    
+    state.dailyChallenges.forEach(c => {
+        let buttonHTML = '';
+        if (c.status === 'active') {
+            const onclick = c.type === 'quiz' ? `openEcoQuizModal('${c.id}')` : `startCamera('${c.id}')`;
+            buttonHTML = `<button onclick="${onclick}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white">${c.buttonText}</button>`;
+        } else if (c.status === 'pending') {
+            buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 cursor-not-allowed">Pending Review</button>`;
+        }
+        els.challengesList.innerHTML += `
+            <div class="glass-card p-4 rounded-2xl flex items-start">
+                <div class="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/40 flex items-center justify-center mr-3">
+                    <i data-lucide="${c.icon}" class="w-5 h-5 text-green-600 dark:text-green-300"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 class="font-bold text-gray-900 dark:text-gray-100">${c.title}</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">${c.description}</p>
+                    <div class="flex items-center justify-between mt-3">
+                        <span class="text-xs font-semibold text-green-700 dark:text-green-300">+${c.points_reward} pts</span>
+                        ${buttonHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    lucide.createIcons();
 };
 
-async function handleChallengeFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file || !currentChallengeIdForUpload) return;
+const renderEventsPage = () => {
+    els.eventsList.innerHTML = '';
     
-    alert('Uploading file... this may take a moment.');
-    const fakePublicURL = 'https://supabase.io/simulated-upload.jpg';
+    if (state.events.length === 0) {
+        els.eventsList.innerHTML = `<p class="text-sm text-center text-gray-500">No events scheduled. Please check back soon!</p>`;
+        return;
+    }
     
-    const { data, error } = await supabase
-        .from('challenge_submissions')
-        .insert({ 
-            challenge_id: currentChallengeIdForUpload, 
-            user_id: state.currentUser.id, 
-            status: 'pending',
-            submission_url: fakePublicURL
-        });
-    
-    if (error) {
-        console.error('Submission error:', error);
-        alert('Error submitting challenge. You may have already submitted.');
+    state.events.forEach(e => {
+        let statusButton = '';
+        if (e.status === 'upcoming') {
+            statusButton = `<button class="w-full bg-green-600 text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center space-x-2"><i data-lucide="ticket" class="w-4 h-4"></i><span>RSVP +${e.points} pts</span></button>`;
+        } else if (e.status === 'attended') {
+            statusButton = `<div class="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-200 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="check-circle" class="w-4 h-4"></i><span>Attended (+${e.points} pts)</span></div>`;
+        } else {
+             statusButton = `<div class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-2 px-4 rounded-lg text-sm w-full flex items-center justify-center space-x-2"><i data-lucide="x-circle" class="w-4 h-4"></i><span>Missed</span></div>`;
+        }
+        els.eventsList.innerHTML += `
+            <div class="glass-card p-4 rounded-2xl ${e.status === 'missed' ? 'opacity-60' : ''}">
+                <div class="flex items-start">
+                    <div class="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg mr-4"><i data-lucide="calendar" class="w-6 h-6 text-purple-600 dark:text-purple-400"></i></div>
+                    <div class="flex-grow">
+                        <p class="text-xs font-semibold text-purple-600 dark:text-purple-400">${e.date}</p>
+                        <h3 class="font-bold text-gray-800 dark:text-gray-100 text-lg">${e.title}</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">${e.description}</p>
+                        ${statusButton}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    lucide.createIcons();
+};
+
+
+// =========================================
+// 11. LEADERBOARD
+// =========================================
+let currentLeaderboardTab = 'student';
+
+const showLeaderboardTab = (tab) => {
+    currentLeaderboardTab = tab;
+    const btnStudent = document.getElementById('leaderboard-tab-student');
+    const btnDept = document.getElementById('leaderboard-tab-dept');
+    const contentStudent = document.getElementById('leaderboard-content-student');
+    const contentDept = document.getElementById('leaderboard-content-department');
+
+    if (tab === 'department') {
+        btnDept.classList.add('active');
+        btnStudent.classList.remove('active');
+        contentDept.classList.remove('hidden');
+        contentStudent.classList.add('hidden');
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
+        renderDepartmentLeaderboard();
     } else {
-        alert('Submission successful! It is now pending review.');
-        const challenge = state.dailyChallenges.find(c => c.id === currentChallengeIdForUpload);
-        if (challenge) challenge.status = 'pending';
+        btnStudent.classList.add('active');
+        btnDept.classList.remove('active');
+        contentStudent.classList.remove('hidden');
+        contentDept.classList.add('hidden');
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
+        renderStudentLeaderboard();
+    }
+};
+window.showLeaderboardTab = showLeaderboardTab;
+
+const renderDepartmentLeaderboard = () => {
+    const container = document.getElementById('eco-wars-page-list');
+    container.innerHTML = '';
+    
+    if (state.departmentLeaderboard.length === 0) {
+        container.innerHTML = `<p class="text-sm text-center text-gray-500">Department rankings are being calculated.</p>`;
+        return;
+    }
+    
+    state.departmentLeaderboard
+        .sort((a, b) => b.points - a.points)
+        .forEach((dept, index) => {
+            container.innerHTML += `
+                <div class="glass-card p-3 rounded-2xl flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center mr-3 text-xs font-bold text-emerald-700 dark:text-emerald-200">#${index + 1}</span>
+                        <div>
+                            <p class="font-semibold text-gray-800 dark:text-gray-100">${dept.name}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">${dept.points.toLocaleString()} pts</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+};
+
+const renderStudentLeaderboard = () => {
+    if (state.leaderboard.length === 0) {
+        els.lbPodium.innerHTML = `<p class="text-sm text-center text-gray-500">Loading podium...</p>`;
+        els.lbList.innerHTML = `<p class="text-sm text-center text-gray-500">Loading rankings...</p>`;
+        return;
+    }
+    
+    const sorted = [...state.leaderboard];
+    const rank1 = sorted[0], rank2 = sorted[1], rank3 = sorted[2];
+    const rest = sorted.slice(3);
+
+    els.lbPodium.innerHTML = `
+        <div class="podium">
+            <div class="champ"><div class="badge silver">${rank2 ? rank2.initials : 'N/A'}</div><div class="champ-name">${rank2 ? rank2.name : '-'}</div><div class="champ-points">${rank2 ? rank2.lifetime_points : 0} pts</div><div class="rank">2nd</div></div>
+            <div class="champ"><div class="badge gold">${rank1 ? rank1.initials : 'N/A'}</div><div class="champ-name">${rank1 ? rank1.name : '-'}</div><div class="champ-points">${rank1 ? rank1.lifetime_points : 0} pts</div><div class="rank">1st</div></div>
+            <div class="champ"><div class="badge bronze">${rank3 ? rank3.initials : 'N/A'}</div><div class="champ-name">${rank3 ? rank3.name : '-'}</div><div class="champ-points">${rank3 ? rank3.lifetime_points : 0} pts</div><div class="rank">3rd</div></div>
+        </div>
+    `;
+
+    els.lbList.innerHTML = '';
+    rest.forEach((user, index) => {
+        els.lbList.innerHTML += `
+            <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
+                <div class="user">
+                    <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
+                    <div class="circle">${user.initials}</div>
+                    <div class="user-info"><strong>${user.name} ${user.isCurrentUser ? '(You)' : ''}</strong><span class="sub-class">${user.course}</span></div>
+                </div>
+                <div class="points-display">${user.lifetime_points} pts</div>
+            </div>
+        `;
+    });
+};
+
+// =========================================
+// 12. OTHER PAGES (Profile, Ecopoints)
+// =========================================
+
+const renderProfile = () => {
+    const u = state.currentUser;
+    if (!u) return;
+    
+    const l = getUserLevel(u.lifetime_points);
+    document.getElementById('profile-name').textContent = u.full_name;
+    document.getElementById('profile-email').textContent = u.email;
+    document.getElementById('profile-avatar').src = u.profile_img_url || getPlaceholderImage('112x112', getUserInitials(u.full_name));
+    document.getElementById('profile-joined').textContent = 'Joined ' + formatDate(u.joined_at, { month: 'short', year: 'numeric' });
+    document.getElementById('profile-level-title').textContent = l.title;
+    document.getElementById('profile-level-number').textContent = l.level;
+    document.getElementById('profile-level-progress').style.width = l.progress + '%';
+    document.getElementById('profile-level-next').textContent = l.progressText;
+    document.getElementById('profile-student-id').textContent = u.student_id;
+    document.getElementById('profile-course').textContent = u.course;
+    document.getElementById('profile-mobile').textContent = u.mobile || 'Not set';
+    document.getElementById('profile-email-personal').textContent = u.email;
+};
+
+const renderEcoPointsPage = () => {
+    const u = state.currentUser;
+    if (!u) return;
+    
+    const l = getUserLevel(u.lifetime_points);
+    document.getElementById('ecopoints-balance').textContent = u.current_points;
+    document.getElementById('ecopoints-level-title').textContent = l.title;
+    document.getElementById('ecopoints-level-number').textContent = l.level;
+    document.getElementById('ecopoints-level-progress').style.width = l.progress + '%';
+    document.getElementById('ecopoints-level-next').textContent = l.progressText;
+    
+    const actContainer = document.getElementById('ecopoints-recent-activity');
+    actContainer.innerHTML = '';
+    if (state.history.length === 0) {
+        actContainer.innerHTML = `<p class="text-sm text-gray-500">No recent activity.</p>`;
+    } else {
+        state.history.slice(0,4).forEach(h => {
+            actContainer.innerHTML += `<div class="flex items-center justify-between text-sm"><div class="flex items-center"><span class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mr-3"><i data-lucide="${h.icon}" class="w-4 h-4 text-gray-600 dark:text-gray-300"></i></span><div><p class="font-semibold text-gray-800 dark:text-gray-100">${h.description}</p><p class="text-xs text-gray-500 dark:text-gray-400">${h.date}</p></div></div><span class="font-bold ${h.points >= 0 ? 'text-green-600' : 'text-red-500'}">${h.points > 0 ? '+' : ''}${h.points}</span></div>`;
+        });
+    }
+    
+    const levelsContainer = document.getElementById('all-levels-list');
+    levelsContainer.innerHTML = '';
+    state.levels.forEach(lvl => {
+         levelsContainer.innerHTML += `<div class="flex items-center"><span class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center mr-3 text-sm font-bold text-green-600 dark:text-green-300">${lvl.level}</span><div><p class="text-sm font-bold text-gray-800 dark:text-gray-100">${lvl.title}</p><p class="text-xs text-gray-500 dark:text-gray-400">${lvl.minPoints} pts required</p></div></div>`;
+    });
+    
+    lucide.createIcons();
+};
+
+// =========================================
+// 13. MODALS (Chat, Quiz, Camera)
+// =========================================
+// --- Chatbot ---
+const openChatbotModal = () => {
+    document.getElementById('chatbot-modal').classList.add('open');
+    document.getElementById('chatbot-modal').classList.remove('invisible');
+};
+window.openChatbotModal = openChatbotModal;
+
+const closeChatbotModal = () => {
+    document.getElementById('chatbot-modal').classList.remove('open');
+    setTimeout(() => document.getElementById('chatbot-modal').classList.add('invisible'), 300);
+};
+window.closeChatbotModal = closeChatbotModal;
+
+// --- Eco Quiz ---
+const openEcoQuizModal = (challengeId) => {
+    document.getElementById('eco-quiz-modal').classList.add('open');
+    document.getElementById('eco-quiz-modal').classList.remove('invisible');
+    // TODO: Load quiz questions from Supabase based on challengeId
+};
+window.openEcoQuizModal = openEcoQuizModal;
+
+const closeEcoQuizModal = () => {
+    document.getElementById('eco-quiz-modal').classList.remove('open');
+    setTimeout(() => document.getElementById('eco-quiz-modal').classList.add('invisible'), 300);
+};
+window.closeEcoQuizModal = closeEcoQuizModal;
+
+const handleQuizAnswer = (isCorrect, challengeId) => {
+    // TODO: Implement quiz logic and grant points
+    alert(`Quiz answer submitted for ${challengeId}. Correct: ${isCorrect}`);
+    closeEcoQuizModal();
+};
+window.handleQuizAnswer = handleQuizAnswer;
+
+// --- Camera ---
+let currentCameraStream = null;
+let currentChallengeIdForCamera = null;
+
+const startCamera = async (challengeId) => {
+    currentChallengeIdForCamera = challengeId;
+    const modal = document.getElementById('camera-modal');
+    const video = document.getElementById('camera-feed');
+    
+    modal.classList.remove('hidden');
+    
+    try {
+        currentCameraStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } // Use 'environment' for back camera
+        });
+        video.srcObject = currentCameraStream;
+    } catch (err) {
+        console.error("Camera error:", err);
+        alert("Unable to access camera. Please check permissions.");
+        closeCameraModal();
+    }
+};
+window.startCamera = startCamera;
+
+const closeCameraModal = () => {
+    const modal = document.getElementById('camera-modal');
+    if (currentCameraStream) {
+        currentCameraStream.getTracks().forEach(track => track.stop());
+    }
+    document.getElementById('camera-feed').srcObject = null;
+    modal.classList.add('hidden');
+};
+window.closeCameraModal = closeCameraModal;
+
+const capturePhoto = () => {
+    const video = document.getElementById('camera-feed');
+    const canvas = document.getElementById('camera-canvas');
+    const context = canvas.getContext('2d');
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // TODO: Implement image upload to Supabase Storage
+    alert(`Photo captured for challenge ${currentChallengeIdForCamera}. Upload logic needed.`);
+    
+    // For now, just set to pending
+    const challenge = state.dailyChallenges.find(c => c.id === currentChallengeIdForCamera);
+    if (challenge) {
+        challenge.status = 'pending';
+        challenge.buttonText = 'Pending Review';
         renderChallengesPage();
     }
-    event.target.value = null;
-    currentChallengeIdForUpload = null;
-}
-
-window.startCamera = async (challengeId) => {
-    alert("Camera modal not implemented, using file upload instead.");
-    openChallengeUpload(challengeId);
+    
+    closeCameraModal();
 };
-window.closeCameraModal = () => { };
-window.capturePhoto = () => { };
-window.switchCamera = () => { };
+window.capturePhoto = capturePhoto;
 
-window.handleEventRSVP = async (eventId) => {
-    const { data, error } = await supabase.from('event_attendance').insert({ event_id: eventId, user_id: state.currentUser.id, status: 'registered' });
+const switchCamera = () => {
+    alert("Switch camera functionality not implemented.");
+};
+window.switchCamera = switchCamera;
+
+// =========================================
+// 14. EVENT LISTENERS & INIT
+// =========================================
+
+// Search & Sort Listeners
+els.storeSearch.addEventListener('input', renderRewards);
+els.storeSearchClear.addEventListener('click', () => { els.storeSearch.value = ''; renderRewards(); });
+els.sortBy.addEventListener('change', renderRewards);
+
+// Sidebar Toggle Listener
+document.getElementById('sidebar-toggle-btn').addEventListener('click', () => toggleSidebar());
+
+// Logout Listener
+document.getElementById('logout-button').addEventListener('click', handleLogout);
+
+// Theme Toggle
+const themeBtn = document.getElementById('theme-toggle-btn');
+const themeText = document.getElementById('theme-text');
+const themeIcon = document.getElementById('theme-icon');
+
+const applyTheme = (isDark) => {
+    document.documentElement.classList.toggle('dark', isDark);
+    themeText.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+    themeIcon.setAttribute('data-lucide', isDark ? 'moon' : 'sun');
+    lucide.createIcons();
+};
+
+themeBtn.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
+    applyTheme(isDark);
+});
+
+// Load initial theme
+const savedTheme = localStorage.getItem('eco-theme');
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+applyTheme(savedTheme === 'dark' || (!savedTheme && prefersDark));
+
+// --- Password Update ---
+document.getElementById('change-password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPassword = document.getElementById('new-password').value;
+    const msgEl = document.getElementById('password-message');
+    const btn = document.getElementById('change-password-button');
+    
+    btn.disabled = true;
+    msgEl.textContent = 'Updating...';
+    
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    
     if (error) {
-        console.error('RSVP error:', error);
-        alert('Error registering for event. You may already be registered.');
+        msgEl.textContent = `Error: ${error.message}`;
+        msgEl.classList.add('text-red-500');
     } else {
-        alert('Successfully registered for the event!');
-        const event = state.events.find(e => e.id === eventId);
-        if (event) event.status = 'registered';
-        renderEventsPage();
-    }
-};
-
-// =========================================
-// 10. BACKGROUND DATA REFRESHERS
-// =========================================
-
-async function loadMyRewards() {
-    const { data: ordersRes, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*, products(*, product_images(image_url), stores(name)))')
-        .eq('user_id', state.currentUser.id)
-        .order('created_at', { ascending: false });
-
-    if (error) return;
-
-    state.userRewards = [];
-    (ordersRes || []).forEach(order => {
-        order.order_items.forEach(item => {
-            state.userRewards.push({
-                userRewardId: item.id,
-                orderId: order.id,
-                productId: item.product_id,
-                purchaseDate: new Date(order.created_at).toLocaleDateString('en-CA'),
-                status: order.status,
-                productName: item.products.name,
-                productImage: item.products.product_images?.[0]?.image_url || 'https://placehold.co/100x100',
-                storeName: item.products.stores.name,
-                storeId: item.products.store_id
-            });
-        });
-    });
-    if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
-}
-
-// =========================================
-// 11. EVENT LISTENERS
-// =========================================
-
-function setupEventListeners() {
-    if(els.storeSearch) els.storeSearch.addEventListener('input', renderRewards);
-    if(els.storeSearchClear) els.storeSearchClear.addEventListener('click', () => { els.storeSearch.value = ''; renderRewards(); });
-    if(els.sortBy) els.sortBy.addEventListener('change', renderRewards);
-    if(document.getElementById('sidebar-toggle-btn')) document.getElementById('sidebar-toggle-btn').addEventListener('click', () => toggleSidebar());
-
-    if (localStorage.getItem('eco-theme') === 'dark' || (!localStorage.getItem('eco-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-        if(document.getElementById('theme-text')) document.getElementById('theme-text').textContent = 'Dark Mode';
-        if(document.getElementById('theme-icon')) document.getElementById('theme-icon').setAttribute('data-lucide', 'moon');
-    } else {
-        document.documentElement.classList.remove('dark');
-        if(document.getElementById('theme-text')) document.getElementById('theme-text').textContent = 'Light Mode';
-        if(document.getElementById('theme-icon')) document.getElementById('theme-icon').setAttribute('data-lucide', 'sun');
+        msgEl.textContent = 'Password updated successfully!';
+        msgEl.classList.add('text-green-500');
+        document.getElementById('new-password').value = '';
     }
     
-    if(document.getElementById('theme-toggle-btn')) {
-        document.getElementById('theme-toggle-btn').addEventListener('click', () => {
-            const isDark = document.documentElement.classList.toggle('dark');
-            localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
-            document.getElementById('theme-text').textContent = isDark ? 'Dark Mode' : 'Light Mode';
-            document.getElementById('theme-icon').setAttribute('data-lucide', isDark ? 'moon' : 'sun');
-            if(window.lucide) lucide.createIcons();
-        });
-    }
+    btn.disabled = false;
+    setTimeout(() => {
+        msgEl.textContent = '';
+        msgEl.classList.remove('text-red-500', 'text-green-500');
+    }, 3000);
+});
 
-    if(document.getElementById('logout-button')) {
-        document.getElementById('logout-button').addEventListener('click', async () => {
-            await supabase.auth.signOut();
-        });
-    }
+// --- Redeem Code ---
+document.getElementById('redeem-code-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('redeem-input').value;
+    const msgEl = document.getElementById('redeem-message');
+    const btn = document.getElementById('redeem-submit-btn');
 
-    const pwForm = document.getElementById('change-password-form');
-    if(pwForm) {
-        pwForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const newPassword = document.getElementById('new-password').value;
-            const msg = document.getElementById('password-message');
-            const btn = document.getElementById('change-password-button');
-            btn.disabled = true;
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) {
-                msg.textContent = `Error: ${error.message}`;
-                msg.classList.add('text-red-500');
-            } else {
-                msg.textContent = 'Password updated successfully!';
-                msg.classList.add('text-green-500');
-                pwForm.reset();
-            }
-            btn.disabled = false;
-        });
-    }
+    btn.disabled = true;
+    msgEl.textContent = 'Redeeming...';
+    
+    // Call a Supabase RPC function 'redeem_coupon'
+    const { data, error } = await supabase.rpc('redeem_coupon', { p_code: code });
 
-    const redeemForm = document.getElementById('redeem-code-form');
-    if(redeemForm) {
-        redeemForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const code = document.getElementById('redeem-input').value.toUpperCase();
-            const msg = document.getElementById('redeem-message');
-            const btn = document.getElementById('redeem-submit-btn');
-            btn.disabled = true;
-            msg.textContent = 'Redeeming...';
-            msg.className = 'text-sm text-center text-gray-500';
-
-            const { data: coupon, error: couponError } = await supabase.from('coupons').select('id').eq('code', code).single();
-            
-            if (couponError || !coupon) {
-                msg.textContent = 'Invalid coupon code.';
-                msg.className = 'text-sm text-center text-red-500';
-                btn.disabled = false;
-                return;
-            }
-
-            const { data: redemption, error: redeemError } = await supabase
-                .from('coupon_redemptions')
-                .insert({ coupon_id: coupon.id, user_id: state.currentUser.id })
-                .select().single();
-            
-            if (redeemError) {
-                msg.textContent = `Error: ${redeemError.message}`;
-                msg.className = 'text-sm text-center text-red-500';
-                btn.disabled = false;
-                return;
-            }
-
-            if (redemption) {
-                await refreshUserPoints();
-                msg.textContent = `Success! +${redemption.points_awarded} points added!`;
-                msg.className = 'text-sm text-center text-green-500';
-                redeemForm.reset();
-            }
-            btn.disabled = false;
-        });
-    }
-
-    const chatbotForm = document.getElementById('chatbot-form');
-    if(chatbotForm) {
-        chatbotForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const input = document.getElementById('chatbot-input');
-            const messages = document.getElementById('chatbot-messages');
-            if (input.value.trim() === '') return;
-
-            messages.innerHTML += `
-                <div class="flex justify-end">
-                    <div class="bg-green-600 text-white p-3 rounded-lg rounded-br-none max-w-xs">
-                        <p class="text-sm">${input.value}</p>
-                    </div>
-                </div>`;
-            
-            setTimeout(() => {
-                messages.innerHTML += `
-                    <div class="flex">
-                        <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg rounded-bl-none max-w-xs">
-                            <p class="text-sm text-gray-800 dark:text-gray-100">Thanks for asking! You can recycle plastics #1, #2, and #5 on campus at the blue bins.</p>
-                        </div>
-                    </div>`;
-                messages.scrollTop = messages.scrollHeight;
-            }, 1000);
-            
-            input.value = '';
-            messages.scrollTop = messages.scrollHeight;
-        });
+    if (error) {
+        msgEl.textContent = `Error: ${error.message}`;
+        msgEl.classList.add('text-red-500');
+    } else {
+        msgEl.textContent = `Success! You earned ${data.points_awarded} points.`;
+        msgEl.classList.add('text-green-500');
+        document.getElementById('redeem-input').value = '';
+        await refreshUserData(); // Refresh points
     }
     
-    if(window.lucide) lucide.createIcons();
-}
+    btn.disabled = false;
+    setTimeout(() => {
+        msgEl.textContent = '';
+        msgEl.classList.remove('text-red-500', 'text-green-500');
+    }, 3000);
+});
+
+
+// --- Chatbot Form ---
+document.getElementById('chatbot-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('chatbot-input');
+    const messages = document.getElementById('chatbot-messages');
+    if (input.value.trim() === '') return;
+
+    // Add user message
+    messages.innerHTML += `
+        <div class="flex justify-end">
+            <div class="bg-green-600 text-white p-3 rounded-lg rounded-br-none max-w-xs">
+                <p class="text-sm">${input.value}</p>
+            </div>
+        </div>
+    `;
+    
+    // TODO: Add call to AI chatbot
+    const botReply = "I'm sorry, I'm just a demo. I can't process requests yet.";
+    
+    // Add bot reply
+    setTimeout(() => {
+        messages.innerHTML += `
+            <div class="flex">
+                <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg rounded-bl-none max-w-xs">
+                    <p class="text-sm text-gray-800 dark:text-gray-100">${botReply}</p>
+                </div>
+            </div>
+        `;
+        messages.scrollTop = messages.scrollHeight;
+    }, 1000);
+
+    input.value = '';
+    messages.scrollTop = messages.scrollHeight;
+});
+
+// =========================================
+// 15. START APPLICATION
+// =========================================
+checkAuth();
