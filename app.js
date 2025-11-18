@@ -1,7 +1,11 @@
 // =========================================
 // 1. IMPORTS & SETUP
 // =========================================
-import { supabase } from './supabase-client.js';
+//
+// FIX: Changed from `import { supabase }` to `import supabase`
+// This correctly imports the default export from your supabase-client.js
+//
+import supabase from './supabase-client.js';
 
 // =========================================
 // 2. APPLICATION STATE
@@ -81,6 +85,7 @@ const els = {
 // =========================================
 
 // Listen for authentication changes
+// This line (15) was throwing the error, but it was caused by the import
 supabase.auth.onAuthStateChanged(async (event, session) => {
     if (session) {
         state.currentAuthUser = session.user;
@@ -842,7 +847,7 @@ function renderMyRewardsPage() {
         }
 
         els.allRewardsList.innerHTML += `
-            <div classclass="glass-card p-4 rounded-2xl flex items-center justify-between ${isUsed || isCancelled ? 'opacity-60' : ''}">
+            <div class="glass-card p-4 rounded-2xl flex items-center justify-between ${isUsed || isCancelled ? 'opacity-60' : ''}">
                 <div class="flex items-center">
                     <img src="${ur.productImage}" class="w-14 h-14 rounded-lg object-cover mr-3" onerror="this.src='https://placehold.co/100x100'">
                     <div>
@@ -1061,7 +1066,7 @@ window.openPurchaseModal = (productId) => {
             <button onclick="closePurchaseModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
         <div class="flex items-center mb-4">
-            <img src="${product.images[0].replace('400x300', '100x100')}" class="w-20 h-20 object-cover rounded-lg mr-4" onerror="this.src='https.placehold.co/100x100'">
+            <img src="${product.images[0].replace('400x300', '100x100')}" class="w-20 h-20 object-cover rounded-lg mr-4" onerror="this.src='https://placehold.co/100x100'">
             <div>
                 <h4 class="text-lg font-bold text-gray-800 dark:text-gray-100">${product.name}</h4>
                 <p class="text-sm text-gray-500 mb-2">From ${store.name}</p>
