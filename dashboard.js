@@ -47,12 +47,9 @@ const renderDashboardUI = () => {
     document.getElementById('impact-recycled').textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
     document.getElementById('impact-co2').textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     document.getElementById('impact-events').textContent = user.impact?.events_attended || 0;
-    
-    // Event Card Visibility handled in events.js (updateDashboardEvent)
 };
 
 const renderCheckinButtonState = () => {
-    // ... (existing checkin button logic, no changes needed) ...
     const streak = state.currentUser.checkInStreak || 0;
     document.getElementById('dashboard-streak-text-pre').textContent = streak;
     document.getElementById('dashboard-streak-text-post').textContent = streak;
@@ -69,9 +66,7 @@ const renderCheckinButtonState = () => {
     }
 };
 
-// ... (Rest of the file: openCheckinModal, handleDailyCheckin, renderHistory, renderProfile etc. remain the same) ...
 export const openCheckinModal = () => {
-    // Same as before
     if (state.currentUser.isCheckedInToday) return;
     const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.remove('invisible', 'opacity-0');
