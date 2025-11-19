@@ -25,9 +25,9 @@ html, body {
     box-shadow: none !important;
 }
 
-/* Re-enable shadows only for specific elements where we manually add them */
+/* Re-enable shadows only for specific elements */
 .shadow-lg, .champ, .badge, .list .item, .btn-eco-gradient {
-    /* Shadows defined in their specific classes below */
+   /* Shadows handled by specific classes */
 }
 
 .app-container {
@@ -49,7 +49,7 @@ header, nav {
     overflow-y: auto;
     overflow-x: hidden;
     scroll-behavior: smooth;
-    position: relative; /* Context for absolute positioning */
+    position: relative;
 }
 
 /* =========================================
@@ -129,7 +129,7 @@ header, nav {
     border: 1px solid rgba(148, 163, 184, 0.40);
 }
 .dark .glass-card {
-    background: rgba(15, 23, 42, 0.80); /* Slightly more opaque for dark mode readability */
+    background: rgba(15, 23, 42, 0.80);
     border-color: rgba(55, 65, 81, 0.9);
 }
 
@@ -159,7 +159,7 @@ header, nav {
 /* Gradient Buttons */
 .btn-eco-gradient {
     background-image: linear-gradient(135deg, #10B981, #34D399);
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important; /* Force shadow */
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3) !important;
 }
 .btn-eco-gradient:hover {
     filter: brightness(1.05);
@@ -190,7 +190,7 @@ header, nav {
     animation: leafFall linear infinite;
 }
 .dark .leaf {
-    background: rgba(52, 211, 153, 0.4); /* Lighter green for dark mode */
+    background: rgba(52, 211, 153, 0.4);
 }
 
 @keyframes leafFall {
@@ -240,7 +240,7 @@ header, nav {
     justify-content: flex-end;
 }
 .dark .champ {
-    background: #1f2937; /* Dark mode bg */
+    background: #1f2937;
     color: #f3f4f6;
     box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
 }
@@ -258,7 +258,7 @@ header, nav {
     width: 50px;
     height: 50px;
     border-radius: 50%;
-    margin: -40px auto 10px auto; /* Adjusted for mobile sizing */
+    margin: -40px auto 10px auto;
     font-weight: 700;
     font-size: 16px;
     display: flex;
@@ -273,7 +273,7 @@ header, nav {
 }
 .dark .badge {
     border-color: #374151;
-    color: #000; /* Keep text dark on gold/silver/bronze bg */
+    color: #000;
 }
 
 .badge::after {
@@ -319,7 +319,7 @@ header, nav {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding-bottom: 80px; /* Space for bottom nav */
+    padding-bottom: 80px;
 }
 
 .list .item {
@@ -354,9 +354,6 @@ header, nav {
     gap: 12px;
 }
 
-/* Updated .circle to support images for Leaderboard
-    If this class is used on an <img> tag, object-cover ensures it looks good.
-*/
 .circle {
     width: 36px;
     height: 36px;
@@ -369,8 +366,8 @@ header, nav {
     background: #e8f5e9; 
     color: var(--forest-accent);
     flex-shrink: 0;
-    overflow: hidden; /* Ensure image doesn't bleed */
-    object-fit: cover; /* For img tags */
+    overflow: hidden;
+    object-fit: cover;
 }
 .dark .circle {
     background: #064e3b;
@@ -386,6 +383,8 @@ header, nav {
 .user-info strong {
     font-size: 14px;
     color: #222;
+    display: flex;
+    align-items: center;
 }
 .dark .user-info strong { color: #f3f4f6; }
 
@@ -406,7 +405,6 @@ header, nav {
 }
 .dark .points-display { color: #e5e7eb; }
 
-/* Highlight specific rank styling for user if needed */
 .item.is-me {
     border: 2px solid #10B981;
     background: #f0fdf4;
@@ -416,37 +414,39 @@ header, nav {
     border-color: #34d399;
 }
 
-
 /* =========================================
    6. MODALS & UTILITIES
    ========================================= */
 /* Check-in Completed State */
 .checkin-completed {
-    background: #F3F4F6 !important; /* Light Grey */
+    background: #F3F4F6 !important;
     background-image: none !important;
     box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06) !important;
     border: 1px solid #E5E7EB !important;
-    color: #9CA3AF !important; /* Grey text */
+    color: #9CA3AF !important;
     cursor: default !important;
     transform: none !important;
 }
 .dark .checkin-completed {
-    background: #1F2937 !important; /* Dark Grey */
+    background: #1F2937 !important;
     border-color: #374151 !important;
     color: #6B7280 !important;
 }
 
-/* Hide specific elements inside the button when completed */
 .checkin-completed .checkin-hide-on-complete {
     display: none !important;
 }
 
-/* Change text color for specific children when completed */
+/* FIX #1: Force the 'Success' card to show when completed */
+.checkin-completed .checkin-show-on-complete {
+    display: flex !important;
+}
+
 .checkin-completed h3, 
 .checkin-completed span, 
 .checkin-completed i,
 .checkin-completed p {
-    color: #6B7280 !important; /* Cool Grey */
+    color: #6B7280 !important;
 }
 .dark .checkin-completed h3, 
 .dark .checkin-completed span, 
@@ -455,14 +455,21 @@ header, nav {
     color: #9CA3AF !important;
 }
 
-/* Camera Modal */
-#camera-modal {
+/* Modal Transitions */
+#camera-modal, #checkin-modal, #chatbot-modal, #eco-quiz-modal, #purchase-modal, #qr-modal {
     transition: opacity 0.3s ease-in-out, visibility 0.3s;
-    z-index: 60; 
 }
-#camera-modal.open {
+#camera-modal.open, #checkin-modal.open, #chatbot-modal.open, #eco-quiz-modal.open {
     opacity: 1;
     visibility: visible;
+}
+#checkin-modal-content, #chatbot-modal-content, #eco-quiz-modal-content {
+    transition: transform 0.3s ease-in-out;
+}
+#checkin-modal.open #checkin-modal-content, 
+#chatbot-modal.open #chatbot-modal-content,
+#eco-quiz-modal.open #eco-quiz-modal-content {
+    transform: translateY(0);
 }
 
 /* Loader */
@@ -475,23 +482,6 @@ header, nav {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-}
-
-/* Modal Transitions */
-#checkin-modal, #chatbot-modal, #eco-quiz-modal, #purchase-modal, #qr-modal {
-    transition: opacity 0.3s ease-in-out, visibility 0.3s;
-}
-#checkin-modal-content, #chatbot-modal-content, #eco-quiz-modal-content {
-    transition: transform 0.3s ease-in-out;
-}
-#checkin-modal.open, #chatbot-modal.open, #eco-quiz-modal.open {
-    opacity: 1;
-    visibility: visible;
-}
-#checkin-modal.open #checkin-modal-content, 
-#chatbot-modal.open #chatbot-modal-content,
-#eco-quiz-modal.open #eco-quiz-modal-content {
-    transform: translateY(0);
 }
 
 /* Form Inputs */
@@ -542,4 +532,19 @@ header, nav {
 }
 .dark .slider-dot.active {
     background-color: #34D399;
+}
+
+/* =========================================
+   7. NEW FIXES (Tick & UI Corrections)
+   ========================================= */
+
+/* FIX #2: Tick Icon Size Control */
+.tick-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 4px;
+    margin-top: -2px; /* Slight alignment adjustment */
 }
