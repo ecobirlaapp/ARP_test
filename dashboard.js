@@ -19,7 +19,7 @@ export const loadDashboardData = async () => {
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', today).limit(1),
             supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
             supabase.from('user_impact').select('*').eq('user_id', userId).single(),
-            supabase.from('events').select('title, description').order('start_at', { ascending: true }).limit(1)
+            supabase.from('events').select('*').gte('start_at', new Date().toISOString()).order('start_at', { ascending: true }).limit(1)
         ]);
         
         if (checkinError && checkinError.code !== 'PGRST116') console.error('Checkin Load Error:', checkinError.message);
@@ -27,7 +27,7 @@ export const loadDashboardData = async () => {
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
-        state.featuredEvent = (eventData && eventData.length > 0) ? eventData[0] : { title: "No upcoming events", description: "Check back soon for more activities!" };
+        state.featuredEvent = (eventData && eventData.length > 0) ? eventData[0] : null;
         
     } catch (err) {
         console.error('Dashboard Data Error:', err);
@@ -55,8 +55,16 @@ const renderDashboardUI = () => {
     document.getElementById('impact-co2').textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     document.getElementById('impact-events').textContent = user.impact?.events_attended || 0;
     
-    document.getElementById('dashboard-event-title').textContent = state.featuredEvent?.title || '...';
-    document.getElementById('dashboard-event-desc').textContent = state.featuredEvent?.description || '...';
+    // HIDE EVENT CARD IF NO EVENT
+    const eventCard = document.getElementById('dashboard-event-card');
+    if (state.featuredEvent) {
+        eventCard.classList.remove('hidden');
+        document.getElementById('dashboard-event-title').textContent = state.featuredEvent.title;
+        document.getElementById('dashboard-event-desc').textContent = state.featuredEvent.description;
+        document.getElementById('dashboard-event-date').textContent = formatDate(state.featuredEvent.start_at);
+    } else {
+        eventCard.classList.add('hidden');
+    }
 };
 
 const renderCheckinButtonState = () => {
@@ -129,7 +137,7 @@ export const handleDailyCheckin = async () => {
     }
 };
 
-// History
+// History Logic from existing code...
 export const loadHistoryData = async () => {
     try {
         const { data, error } = await supabase.from('points_ledger').select('*').eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
@@ -161,6 +169,7 @@ export const renderHistory = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
+// Profile logic same as before...
 export const renderProfile = () => {
     const u = state.currentUser;
     if (!u) return;
@@ -179,7 +188,7 @@ export const renderProfile = () => {
     document.getElementById('profile-email-personal').textContent = u.email;
 };
 
-// Setup File Upload (Profile)
+// Setup File Upload (Profile) - same as before
 export const setupFileUploads = () => {
     const profileInput = document.getElementById('profile-upload-input');
     if (profileInput) {
@@ -209,7 +218,7 @@ export const setupFileUploads = () => {
     }
 };
 
-// Chatbot
+// Chatbot wrappers...
 export const openChatbotModal = () => {
     document.getElementById('chatbot-modal').classList.add('open');
     document.getElementById('chatbot-modal').classList.remove('invisible');
@@ -219,10 +228,8 @@ export const closeChatbotModal = () => {
     setTimeout(() => document.getElementById('chatbot-modal').classList.add('invisible'), 300);
 };
 
-// Window attachments
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
 window.openChatbotModal = openChatbotModal;
 window.closeChatbotModal = closeChatbotModal;
-// Also needed for renderDashboard in App.js export, but typically app.js imports this.
