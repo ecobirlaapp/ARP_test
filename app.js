@@ -8,6 +8,15 @@ const CLOUDINARY_CLOUD_NAME = 'dnia8lb2q';
 const CLOUDINARY_UPLOAD_PRESET = 'EcoBirla_avatars';
 const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 
+// Tick Images
+const TICK_IMAGES = {
+    blue: 'https://i.ibb.co/kgJpMCHr/blue.png',
+    silver: 'https://i.ibb.co/gLJLF9Z2/silver.png',
+    gold: 'https://i.ibb.co/Q2C7MrM/gold.png',
+    black: 'https://i.ibb.co/zVNSNzrK/black.png',
+    green: 'https://i.ibb.co/SXGL4Nq0/green.png'
+};
+
 // =========================================
 // 2. APPLICATION STATE
 // =========================================
@@ -29,7 +38,7 @@ let state = {
         { level: 2, title: 'Eco Learner', minPoints: 1001, nextMin: 2001 },
         { level: 3, title: 'Sustainability Leader', minPoints: 2001, nextMin: 4001 },
     ],
-    currentUploadChallengeId: null // To track which challenge is being uploaded
+    currentUploadChallengeId: null 
 };
 
 // =========================================
@@ -203,11 +212,10 @@ const loadStoreAndProductData = async () => {
 
 const loadLeaderboardData = async () => {
     try {
-        // Fetch all users to calculate department rankings correctly
-        // In a real production app, this aggregation should happen on the DB side (using a View or RPC)
+        // Fetch all users for ranking
         const { data, error } = await supabase
             .from('users')
-            .select('id, full_name, course, lifetime_points, profile_img_url')
+            .select('id, full_name, course, lifetime_points, profile_img_url, tick_type')
             .order('lifetime_points', { ascending: false });
 
         if (error) {
@@ -227,8 +235,8 @@ const loadLeaderboardData = async () => {
         const deptMap = {};
 
         data.forEach(user => {
-            // Remove first 2 letters from course (e.g., "SYBAF" -> "BAF")
             let cleanCourse = user.course ? user.course.trim() : 'General';
+            // Remove starting 2 letters if possible, e.g. SYBAF -> BAF
             if (cleanCourse.length > 2) {
                 cleanCourse = cleanCourse.substring(2); 
             }
@@ -242,6 +250,7 @@ const loadLeaderboardData = async () => {
                 name: user.full_name,
                 points: user.lifetime_points,
                 img: user.profile_img_url,
+                tick_type: user.tick_type,
                 initials: (user.full_name || '...').split(' ').map(n => n[0]).join('').toUpperCase()
             });
         });
@@ -311,7 +320,7 @@ const loadChallengesData = async () => {
         state.dailyChallenges = challenges.map(c => {
             const sub = submissions.find(s => s.challenge_id === c.id);
             let status = 'active';
-            let buttonText = 'Action';
+            let buttonText = 'Start';
             let isDisabled = false;
 
             // Determine Status and Button Text
@@ -330,9 +339,9 @@ const loadChallengesData = async () => {
                 }
             } else {
                 // No submission yet
-                if (c.type === 'upload' || c.type === 'selfie') {
+                if (c.type === 'Upload') {
                     buttonText = 'Take Photo';
-                } else if (c.type === 'quiz') {
+                } else if (c.type === 'Quiz') {
                     buttonText = 'Start Quiz';
                 } else {
                     buttonText = 'Start';
@@ -348,7 +357,6 @@ const loadChallengesData = async () => {
             };
         });
 
-        console.log('Challenges loaded:', state.dailyChallenges);
         if (document.getElementById('challenges').classList.contains('active')) {
             renderChallengesPage();
         }
@@ -475,8 +483,7 @@ const uploadToCloudinary = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    // formData.append('cloud_name', CLOUDINARY_CLOUD_NAME); 
-
+    
     try {
         const res = await fetch(CLOUDINARY_API_URL, {
             method: 'POST',
@@ -518,66 +525,16 @@ const setupFileUploads = () => {
                 // Update State & UI
                 state.currentUser.profile_img_url = imageUrl;
                 renderProfile();
-                renderDashboardUI(); // Update sidebar avatar too
+                renderDashboardUI(); 
                 alert('Profile picture updated!');
 
             } catch (err) {
                 console.error('Profile Upload Failed:', err);
                 alert('Failed to upload profile picture.');
-                avatarEl.src = originalSrc; // Revert
+                avatarEl.src = originalSrc; 
             } finally {
                 avatarEl.style.opacity = '1';
-                profileInput.value = ''; // Reset input
-            }
-        });
-    }
-
-    // 2. Challenge File Upload
-    const challengeInput = document.getElementById('challenge-file-input');
-    if (challengeInput) {
-        challengeInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file || !state.currentUploadChallengeId) return;
-
-            const challengeId = state.currentUploadChallengeId;
-            
-            // Find button to show loading
-            const btn = document.querySelector(`button[data-challenge-id="${challengeId}"]`);
-            const originalText = btn ? btn.innerText : 'Uploading...';
-            if(btn) {
-                btn.innerText = 'Uploading...';
-                btn.disabled = true;
-            }
-
-            try {
-                const imageUrl = await uploadToCloudinary(file);
-                
-                // Insert Submission
-                const { error } = await supabase
-                    .from('challenge_submissions')
-                    .insert({
-                        challenge_id: challengeId,
-                        user_id: state.currentUser.id,
-                        submission_url: imageUrl,
-                        status: 'pending'
-                    });
-
-                if (error) throw error;
-
-                // Refresh Challenges Data
-                await loadChallengesData();
-                alert('Challenge submitted successfully! Pending review.');
-
-            } catch (err) {
-                console.error('Challenge Upload Failed:', err);
-                alert('Failed to submit challenge.');
-                if(btn) {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
-            } finally {
-                challengeInput.value = '';
-                state.currentUploadChallengeId = null;
+                profileInput.value = ''; 
             }
         });
     }
@@ -587,7 +544,13 @@ const setupFileUploads = () => {
 // 6. HELPER FUNCTIONS
 // =========================================
 
-const getPlaceholderImage = (size = '400x300', text = 'EcoBirla') => `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
+const getPlaceholderImage = (size = '400x300', text = 'EcoCampus') => `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
+
+const getTickImg = (tickType) => {
+    if (!tickType) return '';
+    const url = TICK_IMAGES[tickType.toLowerCase()];
+    return url ? `<img src="${url}" class="tick-icon" alt="${tickType} tick">` : '';
+};
 
 const getUserLevel = (points) => {
     let current = state.levels[0];
@@ -632,8 +595,8 @@ const getIconForHistory = (type) => {
 
 const getIconForChallenge = (type) => {
     const icons = {
-        'quiz': 'brain',
-        'upload': 'camera',
+        'Quiz': 'brain',
+        'Upload': 'camera',
         'selfie': 'camera',
         'spot': 'eye'
     };
@@ -666,6 +629,7 @@ const els = {
     historyList: document.getElementById('history-list'),
     storeDetailPage: document.getElementById('store-detail-page'),
     productDetailPage: document.getElementById('product-detail-page'),
+    departmentDetailPage: document.getElementById('department-detail-page'),
     purchaseModalOverlay: document.getElementById('purchase-modal-overlay'),
     purchaseModal: document.getElementById('purchase-modal'),
     qrModalOverlay: document.getElementById('qr-modal-overlay'),
@@ -682,9 +646,13 @@ const showPage = (pageId) => {
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
+    // Reset detail pages
     if (pageId !== 'store-detail-page' && pageId !== 'product-detail-page') {
         els.storeDetailPage.innerHTML = '';
         els.productDetailPage.innerHTML = '';
+    }
+    if (pageId !== 'department-detail-page') {
+        els.departmentDetailPage.innerHTML = '';
     }
 
     document.querySelectorAll('.nav-item, .sidebar-nav-item').forEach(btn => {
@@ -763,13 +731,15 @@ const renderDashboard = () => {
 const renderDashboardUI = () => {
     const user = state.currentUser;
     els.userPointsHeader.textContent = user.current_points;
-    els.userNameGreeting.textContent = user.full_name.split(' ')[0];
+    // Show FULL NAME
+    els.userNameGreeting.textContent = user.full_name;
     
     // Sidebar
-    document.getElementById('user-name-sidebar').textContent = user.full_name;
+    document.getElementById('user-name-sidebar').innerHTML = `${user.full_name} ${getTickImg(user.tick_type)}`;
     document.getElementById('user-points-sidebar').textContent = user.current_points;
     const level = getUserLevel(user.lifetime_points);
     document.getElementById('user-level-sidebar').textContent = level.title;
+    // Use actual profile image
     document.getElementById('user-avatar-sidebar').src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
 
     // Impact stats
@@ -783,31 +753,19 @@ const renderDashboardUI = () => {
 };
 
 const renderCheckinButtonState = () => {
-    document.getElementById('dashboard-streak-text').textContent = `${state.currentUser.checkInStreak} Day Streak`;
+    const streak = state.currentUser.checkInStreak || 0;
+    document.getElementById('dashboard-streak-text-pre').textContent = streak;
+    document.getElementById('dashboard-streak-text-post').textContent = streak;
+    
     const btn = els.dailyCheckinBtn;
-    const checkIcon = document.getElementById('checkin-check-icon');
-    const subtext = document.getElementById('checkin-subtext');
-    const doneText = document.getElementById('checkin-done-text');
 
     if (state.currentUser.isCheckedInToday) {
         btn.classList.add('checkin-completed'); 
         btn.classList.remove('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
-        
-        btn.querySelector('h3').textContent = "Check-in Complete";
-        subtext.style.display = 'none';
-        doneText.classList.remove('hidden');
-        checkIcon.classList.remove('hidden');
-        
         btn.onclick = null; 
     } else {
         btn.classList.remove('checkin-completed');
         btn.classList.add('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
-        
-        btn.querySelector('h3').textContent = "Daily Check-in";
-        subtext.style.display = 'block';
-        doneText.classList.add('hidden');
-        checkIcon.classList.add('hidden');
-        
         btn.onclick = openCheckinModal;
     }
 };
@@ -866,7 +824,6 @@ const handleDailyCheckin = async () => {
         state.currentUser.isCheckedInToday = true;
         
         closeCheckinModal();
-        // Refresh user data
         await Promise.all([
             refreshUserData(),
             loadDashboardData() 
@@ -1178,7 +1135,7 @@ const openRewardQrModal = (userRewardId) => {
     const ur = state.userRewards.find(r => r.userRewardId === userRewardId);
     if (!ur) return;
     
-    const qrValue = `ecobirla-order:${userRewardId}-user:${state.currentUser.id}`;
+    const qrValue = `ecocampus-order:${userRewardId}-user:${state.currentUser.id}`;
     
     els.qrModal.innerHTML = `
         <div class="flex justify-between items-center mb-4">
@@ -1250,10 +1207,11 @@ const renderChallengesPage = () => {
              buttonHTML = `<button disabled class="text-xs font-semibold px-3 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-300 cursor-not-allowed">${c.buttonText}</button>`;
         } else {
             // Check type
-            if (c.type === 'quiz') {
+            if (c.type === 'Quiz') {
                 buttonHTML = `<button onclick="openEcoQuizModal('${c.id}')" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white hover:bg-green-700">${c.buttonText}</button>`;
-            } else if (c.type === 'upload' || c.type === 'selfie') {
-                buttonHTML = `<button onclick="triggerChallengeUpload('${c.id}')" data-challenge-id="${c.id}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white hover:bg-green-700"><i data-lucide="camera" class="w-3 h-3 mr-1 inline-block"></i>${c.buttonText}</button>`;
+            } else if (c.type === 'Upload' || c.type === 'selfie') {
+                // Opens CAMERA MODAL now
+                buttonHTML = `<button onclick="startCamera('${c.id}')" data-challenge-id="${c.id}" class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white hover:bg-green-700"><i data-lucide="camera" class="w-3 h-3 mr-1 inline-block"></i>${c.buttonText}</button>`;
             } else {
                  buttonHTML = `<button class="text-xs font-semibold px-3 py-2 rounded-full bg-green-600 text-white">${c.buttonText}</button>`;
             }
@@ -1278,6 +1236,7 @@ const renderChallengesPage = () => {
     lucide.createIcons();
 };
 
+// Not used anymore for challenge, only profile
 const triggerChallengeUpload = (challengeId) => {
     state.currentUploadChallengeId = challengeId;
     document.getElementById('challenge-file-input').click();
@@ -1361,7 +1320,7 @@ const renderDepartmentLeaderboard = () => {
     state.departmentLeaderboard.forEach((dept, index) => {
         container.innerHTML += `
             <div class="glass-card p-3 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" 
-                 onclick="toggleDepartmentStudents('${dept.name}')">
+                 onclick="showDepartmentDetail('${dept.name}')">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center">
                         <span class="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center mr-3 text-xs font-bold text-emerald-700 dark:text-emerald-200">#${index + 1}</span>
@@ -1370,45 +1329,44 @@ const renderDepartmentLeaderboard = () => {
                             <p class="text-xs text-gray-500 dark:text-gray-400">${dept.points.toLocaleString()} pts</p>
                         </div>
                     </div>
-                    <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400" id="chevron-${dept.name}"></i>
-                </div>
-                <div id="dept-students-${dept.name}" class="hidden mt-3 border-t border-gray-100 dark:border-gray-700 pt-2 space-y-2 pl-11">
-                    <!-- Students injected here -->
+                    <i data-lucide="chevron-right" class="w-5 h-5 text-gray-400"></i>
                 </div>
             </div>
         `;
-        
-        // Pre-render student list hidden
-        const studentsContainer = container.lastElementChild.querySelector(`#dept-students-${dept.name}`);
-        if (dept.students.length === 0) {
-            studentsContainer.innerHTML = '<p class="text-xs text-gray-400">No students active yet.</p>';
-        } else {
-            // Sort students by points
-            dept.students.sort((a,b) => b.points - a.points).forEach(s => {
-                studentsContainer.innerHTML += `
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-gray-700 dark:text-gray-300">${s.name}</span>
-                        <span class="text-gray-500">${s.points} pts</span>
-                    </div>
-                `;
-            });
-        }
     });
     lucide.createIcons();
 };
 
-const toggleDepartmentStudents = (deptName) => {
-    const el = document.getElementById(`dept-students-${deptName}`);
-    const chev = document.getElementById(`chevron-${deptName}`);
-    if (el.classList.contains('hidden')) {
-        el.classList.remove('hidden');
-        chev.style.transform = 'rotate(180deg)';
-    } else {
-        el.classList.add('hidden');
-        chev.style.transform = 'rotate(0deg)';
-    }
+const showDepartmentDetail = (deptName) => {
+    const deptData = state.departmentLeaderboard.find(d => d.name === deptName);
+    if (!deptData) return;
+
+    const studentsHTML = deptData.students.length === 0 
+        ? `<p class="text-center text-gray-500 col-span-3">No active students in this department.</p>`
+        : deptData.students.map(s => `
+            <div class="dept-student-card">
+                <img src="${s.img || getPlaceholderImage('60x60', s.initials)}" class="w-16 h-16 rounded-full object-cover mb-2 border">
+                <p class="text-xs font-bold text-gray-800 dark:text-gray-100 truncate w-full">${s.name} ${getTickImg(s.tick_type)}</p>
+                <p class="text-xs text-gray-500">${s.points} pts</p>
+            </div>
+        `).join('');
+
+    els.departmentDetailPage.innerHTML = `
+        <div class="flex items-center mb-6">
+            <button onclick="showPage('leaderboard')" class="mr-3 p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </button>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">${deptName} Dept</h2>
+        </div>
+        <div class="dept-student-grid">
+            ${studentsHTML}
+        </div>
+    `;
+
+    showPage('department-detail-page');
+    lucide.createIcons();
 };
-window.toggleDepartmentStudents = toggleDepartmentStudents;
+window.showDepartmentDetail = showDepartmentDetail;
 
 const renderStudentLeaderboard = () => {
     if (state.leaderboard.length === 0) {
@@ -1421,11 +1379,24 @@ const renderStudentLeaderboard = () => {
     const rank1 = sorted[0], rank2 = sorted[1], rank3 = sorted[2];
     const rest = sorted.slice(3);
 
+    // Helpers for podium rendering to handle empty slots
+    const renderChamp = (u, rank) => {
+        if (!u) return '';
+        return `
+             <div class="badge ${rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze'}">
+                ${u.profile_img_url ? `<img src="${u.profile_img_url}" class="w-full h-full object-cover">` : u.initials}
+             </div>
+             <div class="champ-name">${u.name} ${getTickImg(u.tick_type)}</div>
+             <div class="champ-points">${u.lifetime_points} pts</div>
+             <div class="rank">${rank === 1 ? '1st' : rank === 2 ? '2nd' : '3rd'}</div>
+        `;
+    }
+
     els.lbPodium.innerHTML = `
         <div class="podium">
-            <div class="champ"><div class="badge silver">${rank2 ? rank2.initials : 'N/A'}</div><div class="champ-name">${rank2 ? rank2.name : '-'}</div><div class="champ-points">${rank2 ? rank2.lifetime_points : 0} pts</div><div class="rank">2nd</div></div>
-            <div class="champ"><div class="badge gold">${rank1 ? rank1.initials : 'N/A'}</div><div class="champ-name">${rank1 ? rank1.name : '-'}</div><div class="champ-points">${rank1 ? rank1.lifetime_points : 0} pts</div><div class="rank">1st</div></div>
-            <div class="champ"><div class="badge bronze">${rank3 ? rank3.initials : 'N/A'}</div><div class="champ-name">${rank3 ? rank3.name : '-'}</div><div class="champ-points">${rank3 ? rank3.lifetime_points : 0} pts</div><div class="rank">3rd</div></div>
+            <div class="champ">${renderChamp(rank2, 2)}</div>
+            <div class="champ">${renderChamp(rank1, 1)}</div>
+            <div class="champ">${renderChamp(rank3, 3)}</div>
         </div>
     `;
 
@@ -1435,8 +1406,13 @@ const renderStudentLeaderboard = () => {
             <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
                 <div class="user">
                     <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
-                    <div class="circle">${user.initials}</div>
-                    <div class="user-info"><strong>${user.name} ${user.isCurrentUser ? '(You)' : ''}</strong><span class="sub-class">${user.course}</span></div>
+                    <div class="circle">
+                        ${user.profile_img_url ? `<img src="${user.profile_img_url}" class="w-full h-full object-cover">` : user.initials}
+                    </div>
+                    <div class="user-info">
+                        <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''} ${getTickImg(user.tick_type)}</strong>
+                        <span class="sub-class">${user.course}</span>
+                    </div>
                 </div>
                 <div class="points-display">${user.lifetime_points} pts</div>
             </div>
@@ -1453,7 +1429,9 @@ const renderProfile = () => {
     if (!u) return;
     
     const l = getUserLevel(u.lifetime_points);
-    document.getElementById('profile-name').textContent = u.full_name;
+    // Inject Tick into name
+    document.getElementById('profile-name').innerHTML = `${u.full_name} ${getTickImg(u.tick_type)}`;
+    
     document.getElementById('profile-email').textContent = u.email;
     document.getElementById('profile-avatar').src = u.profile_img_url || getPlaceholderImage('112x112', getUserInitials(u.full_name));
     document.getElementById('profile-joined').textContent = 'Joined ' + formatDate(u.joined_at, { month: 'short', year: 'numeric' });
@@ -1582,11 +1560,13 @@ const capturePhoto = async () => {
         if (!blob) return;
         const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
         
-        // Reuse our upload logic manually
-        // Set state to trick setupFileUploads or just call logic here
-        // Simplest: just call Cloudinary directly here since we have the file
-        
-        alert('Photo captured. Uploading...');
+        // Find button to show loading
+        const btn = document.querySelector(`button[data-challenge-id="${currentChallengeIdForCamera}"]`);
+        const originalText = btn ? btn.innerText : 'Uploading...';
+        if(btn) {
+            btn.innerText = 'Uploading...';
+            btn.disabled = true;
+        }
         
         try {
             const imageUrl = await uploadToCloudinary(file);
@@ -1609,6 +1589,10 @@ const capturePhoto = async () => {
         } catch (err) {
             console.error('Camera Upload Error:', err);
             alert('Failed to upload photo.');
+            if(btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
         }
     }, 'image/jpeg', 0.8);
 };
