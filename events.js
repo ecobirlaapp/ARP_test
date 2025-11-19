@@ -4,14 +4,15 @@ import { els, formatDate, getPlaceholderImage, getTickImg } from './utils.js';
 
 export const loadEventsData = async () => {
     try {
-        // Fetch events + attendance counts + specific attendee details (for avatars)
+        // FIX: Explicitly specify the relationship 'users!event_attendance_user_id_fkey'
+        // because 'event_attendance' has multiple foreign keys to 'users' (user_id, admin_id, created_by).
         const { data: events, error } = await supabase
             .from('events')
             .select(`
                 *,
                 event_attendance (
                     status,
-                    users ( id, full_name, profile_img_url, tick_type )
+                    users!event_attendance_user_id_fkey ( id, full_name, profile_img_url, tick_type )
                 )
             `)
             .order('start_at', { ascending: true });
@@ -20,12 +21,17 @@ export const loadEventsData = async () => {
 
         state.events = events.map(e => {
             // Filter for confirmed/registered attendees
-            const attendees = e.event_attendance
+            // We must access the data using the same alias/name used in the select query
+            // Supabase returns the data under 'users' usually, but sometimes under the relation name if aliased.
+            // In this case, with the ! syntax, it usually returns as 'users'.
+            const rawAttendees = e.event_attendance || [];
+            
+            const attendees = rawAttendees
                 .filter(a => a.status === 'registered' || a.status === 'confirmed')
-                .map(a => a.users);
+                .map(a => a.users); // This maps the nested user object
             
             // Check if current user is going
-            const myAttendance = e.event_attendance.find(a => a.users && a.users.id === state.currentUser.id);
+            const myAttendance = rawAttendees.find(a => a.users && a.users.id === state.currentUser.id);
             let myStatus = 'upcoming'; // default
             if (myAttendance) {
                 if (myAttendance.status === 'confirmed') myStatus = 'attended';
@@ -176,6 +182,7 @@ export const closeParticipantsModal = () => {
 // Dashboard Helper
 const updateDashboardEvent = () => {
     const card = document.getElementById('dashboard-event-card');
+    if (!card) return;
     
     // Find the next upcoming event that isn't passed
     const upcoming = state.events.filter(e => new Date(e.start_at) > new Date())[0];
@@ -186,7 +193,7 @@ const updateDashboardEvent = () => {
         card.classList.remove('hidden');
         document.getElementById('dashboard-event-title').textContent = upcoming.title;
         document.getElementById('dashboard-event-desc').textContent = upcoming.description || 'Join us!';
-        state.featuredEvent = upcoming; 
+        state.featuredEvent = upcoming; // Cache for dashboard.js if needed
     }
 };
 
