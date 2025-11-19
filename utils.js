@@ -1,4 +1,12 @@
 import { CLOUDINARY_API_URL, CLOUDINARY_UPLOAD_PRESET, TICK_IMAGES, state } from './state.js';
+import { renderDashboard } from './dashboard.js';
+import { renderRewards, renderMyRewardsPage } from './store.js';
+import { renderHistory } from './dashboard.js';
+import { renderEcoPointsPage } from './store.js';
+import { renderChallengesPage } from './challenges.js';
+import { renderEventsPage } from './events.js'; // Import from new file
+import { renderProfile } from './dashboard.js';
+import { showLeaderboardTab } from './social.js';
 
 // DOM Cache
 export const els = {
@@ -96,7 +104,7 @@ export const showPage = (pageId, addToHistory = true) => {
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
-    // Reset detail pages
+    // Reset detail pages if navigating away
     if (!['store-detail-page', 'product-detail-page'].includes(pageId)) {
         els.storeDetailPage.innerHTML = ''; els.productDetailPage.innerHTML = '';
     }
@@ -110,51 +118,24 @@ export const showPage = (pageId, addToHistory = true) => {
 
     document.querySelector('.main-content').scrollTop = 0;
 
+    // Handle Mobile Back Button Logic
     if (addToHistory) {
         window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
     }
 
-    // Use WINDOW objects to avoid circular imports
-    if (pageId === 'dashboard') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderDashboard) window.renderDashboard(); 
-    } 
-    else if (pageId === 'leaderboard') { 
-        if(window.showLeaderboardTab) window.showLeaderboardTab('student'); 
-    } 
-    else if (pageId === 'rewards') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderRewardsWrapper) window.renderRewardsWrapper(); 
-    } 
-    else if (pageId === 'my-rewards') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderMyRewardsPageWrapper) window.renderMyRewardsPageWrapper(); 
-    } 
-    else if (pageId === 'history') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderHistory) window.renderHistory(); 
-    } 
-    else if (pageId === 'ecopoints') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderEcoPointsPageWrapper) window.renderEcoPointsPageWrapper(); 
-    } 
-    else if (pageId === 'challenges') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderChallengesPageWrapper) window.renderChallengesPageWrapper(); 
-    } 
-    else if (pageId === 'events') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderEventsPageWrapper) window.renderEventsPageWrapper(); 
-    } 
-    else if (pageId === 'profile') { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-        if(window.renderProfile) window.renderProfile(); 
-    }
-    else { 
-        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
-    }
+    // Page Specific Renders
+    if (pageId === 'dashboard') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderDashboard(); } 
+    else if (pageId === 'leaderboard') { showLeaderboardTab('student'); } 
+    else if (pageId === 'rewards') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderRewardsWrapper && window.renderRewardsWrapper(); } 
+    else if (pageId === 'my-rewards') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderMyRewardsPageWrapper && window.renderMyRewardsPageWrapper(); } 
+    else if (pageId === 'history') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderHistory(); } 
+    else if (pageId === 'ecopoints') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderEcoPointsPageWrapper && window.renderEcoPointsPageWrapper(); } 
+    else if (pageId === 'challenges') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderChallengesPageWrapper && window.renderChallengesPageWrapper(); } 
+    else if (pageId === 'events') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderEventsPageWrapper && window.renderEventsPageWrapper(); } 
+    else if (pageId === 'profile') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderProfile(); }
+    else { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); }
 
-    toggleSidebar(true);
+    toggleSidebar(true); // Close sidebar if open
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -163,7 +144,7 @@ window.addEventListener('popstate', (event) => {
     if (event.state && event.state.pageId) {
         showPage(event.state.pageId, false);
     } else {
-        showPage('dashboard', false); 
+        showPage('dashboard', false); // Default fallback
     }
 });
 
