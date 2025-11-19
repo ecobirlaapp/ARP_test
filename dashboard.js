@@ -192,7 +192,7 @@ export const setupFileUploads = () => {
     }
 };
 
-// Attach all Render functions to Window for utils.js to usage
+// Attach all Render functions to Window for utils.js to usagee
 window.renderDashboard = renderDashboard;
 window.renderHistory = renderHistory;
 window.renderProfile = renderProfile;
