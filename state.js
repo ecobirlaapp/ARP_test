@@ -3,11 +3,11 @@ export let state = {
     userAuth: null,    
     checkInReward: 10,
     leaderboard: [],
-    departmentLeaderboard: [],
     stores: [],
     products: [],      
     history: [],
     dailyChallenges: [],
+    activeQuiz: null,  
     events: [],
     userRewards: [],   
     levels: [
