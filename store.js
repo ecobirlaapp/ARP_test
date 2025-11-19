@@ -1,13 +1,12 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage } from './utils.js';
+import { els, getPlaceholderImage, formatDate } from './utils.js';
 import { refreshUserData } from './app.js';
 
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 
 export const loadStoreAndProductData = async () => {
     try {
-        // Updated query to fetch everything needed
         const { data, error } = await supabase.from('products').select(`
                 id, name, description, original_price, discounted_price, ecopoints_cost, store_id, metadata,
                 stores ( name, logo_url ), 
@@ -64,8 +63,7 @@ export const showProductDetailPage = (productId) => {
     const images = (product.images && product.images.length > 0) ? product.images : [getPlaceholderImage()];
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
     
-    // Parse Metadata for Specifications/Highlights if available (assuming JSONB format in DB)
-    // Default values provided if metadata is missing
+    // Parse Metadata
     const specs = product.metadata?.specifications || [
         { label: 'Availability', value: '8:00 AM - 5:00 PM' },
         { label: 'Includes', value: '1 Item' }
@@ -175,49 +173,12 @@ export const showProductDetailPage = (productId) => {
             </div>
         </div>`;
 
-    // Helper function to handle image slider dots logic (optional but nice)
-    setTimeout(() => {
-        const container = els.productDetailPage.querySelector('.slider-container');
-        if(container) {
-            container.addEventListener('scroll', () => {
-                const index = Math.round(container.scrollLeft / container.clientWidth);
-                const dots = els.productDetailPage.querySelectorAll('.slider-dot');
-                dots.forEach((d, i) => {
-                    if (i === index) {
-                        d.classList.add('w-4', 'bg-white');
-                        d.classList.remove('bg-white/50');
-                    } else {
-                        d.classList.remove('w-4', 'bg-white');
-                        d.classList.add('bg-white/50');
-                    }
-                });
-            });
-        }
-    }, 100);
-
-    // Switch View
     els.pages.forEach(p => p.classList.remove('active'));
     els.productDetailPage.classList.add('active');
     document.querySelector('.main-content').scrollTop = 0;
     if(window.lucide) window.lucide.createIcons();
 };
 
-// Re-export functions to Window for HTML access
-window.renderRewardsWrapper = renderRewards;
-window.showProductDetailPage = showProductDetailPage;
-// ... (Rest of exports remain same)
-window.openPurchaseModal = openPurchaseModal;
-window.closePurchaseModal = closePurchaseModal;
-window.confirmPurchase = confirmPurchase;
-window.renderMyRewardsPageWrapper = renderMyRewardsPage;
-window.openRewardQrModal = openRewardQrModal;
-window.closeQrModal = closeQrModal;
-window.renderEcoPointsPageWrapper = renderEcoPointsPage;
-
-// ... (keep the purchase logic functions like openPurchaseModal, confirmPurchase etc. below) ...
-// Ensure you paste the existing purchase logic here or keep it if you only replaced the top half.
-// If you need the full file with purchase logic, let me know. Assuming you kept the logic below showProductDetailPage.
-// Important: Add the purchase logic here if you replaced the whole file.
 export const openPurchaseModal = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -247,7 +208,6 @@ export const confirmPurchase = async (productId) => {
         const { error: itemError } = await supabase.from('order_items').insert({ order_id: orderData.id, product_id: product.id, quantity: 1, price_each: product.discounted_price, points_each: product.ecopoints_cost });
         if (itemError) throw itemError;
         
-        // Auto-confirm for demo/digital items logic usually goes here, but assuming direct confirm for now
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
@@ -295,8 +255,19 @@ export const closeQrModal = () => {
 };
 
 export const renderEcoPointsPage = () => {
-    // ... (keep existing ecopoints rendering logic)
-     const u = state.currentUser;
+    // Basic placeholder
+    const u = state.currentUser;
     if (!u) return;
-    // ... logic from previous file
+    // ... Logic is in dashboard usually, or handled here if needed
 };
+
+// --- ASSIGN TO WINDOW AT THE VERY END ---
+window.renderRewardsWrapper = renderRewards;
+window.showProductDetailPage = showProductDetailPage;
+window.openPurchaseModal = openPurchaseModal;
+window.closePurchaseModal = closePurchaseModal;
+window.confirmPurchase = confirmPurchase;
+window.renderMyRewardsPageWrapper = renderMyRewardsPage;
+window.openRewardQrModal = openRewardQrModal;
+window.closeQrModal = closeQrModal;
+window.renderEcoPointsPageWrapper = renderEcoPointsPage;
