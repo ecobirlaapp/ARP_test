@@ -416,6 +416,15 @@ header, nav {
     border-color: #34d399;
 }
 
+/* Tick Icons for Users */
+.tick-icon {
+    width: 14px;
+    height: 14px;
+    margin-left: 4px;
+    vertical-align: middle;
+    display: inline-block;
+}
+
 
 /* =========================================
    6. MODALS & UTILITIES
@@ -439,6 +448,14 @@ header, nav {
 /* Hide specific elements inside the button when completed */
 .checkin-completed .checkin-hide-on-complete {
     display: none !important;
+}
+
+/* Show specific elements when completed */
+.checkin-show-on-complete {
+    display: none;
+}
+.checkin-completed .checkin-show-on-complete {
+    display: flex !important;
 }
 
 /* Change text color for specific children when completed */
@@ -542,4 +559,25 @@ header, nav {
 }
 .dark .slider-dot.active {
     background-color: #34D399;
+}
+
+/* Department Student Grid */
+.dept-student-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+.dept-student-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 12px;
+    padding: 10px;
+    border: 1px solid rgba(0,0,0,0.05);
+}
+.dark .dept-student-card {
+    background: rgba(31, 41, 55, 0.5);
+    border-color: rgba(255,255,255,0.05);
 }
