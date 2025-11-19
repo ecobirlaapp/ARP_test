@@ -7,7 +7,7 @@ const getProduct = (productId) => state.products.find(p => p.id === productId);
 
 export const loadStoreAndProductData = async () => {
     try {
-        // UPDATED QUERY: Fetches features and specs from their specific tables
+        // Fetches features and specs from their specific tables
         const { data, error } = await supabase.from('products').select(`
                 id, name, description, original_price, discounted_price, ecopoints_cost, store_id, metadata,
                 stores ( name, logo_url ), 
@@ -20,7 +20,6 @@ export const loadStoreAndProductData = async () => {
         state.products = data.map(p => ({
             ...p, 
             images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
-            // Map new tables
             highlights: p.product_features?.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature) || [],
             specs: p.product_specifications?.sort((a,b) => a.sort_order - b.sort_order) || [],
             
@@ -62,6 +61,7 @@ export const renderRewards = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
+// ENHANCED PRODUCT DETAIL PAGE UI
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -69,7 +69,6 @@ export const showProductDetailPage = (productId) => {
     const images = (product.images && product.images.length > 0) ? product.images : [getPlaceholderImage()];
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
     
-    // Data is already mapped in loadStoreAndProductData
     const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'Info', spec_value: 'Standard Item' }];
     const highlights = product.highlights.length > 0 ? product.highlights : ['Quality Verified'];
 
@@ -81,7 +80,7 @@ export const showProductDetailPage = (productId) => {
         sliderDotsHTML += `<button class="slider-dot w-2 h-2 rounded-full bg-white/50 transition-all ${index === 0 ? 'bg-white w-4' : ''}"></button>`;
     });
 
-    // FIX: Increased padding-bottom (pb-32) so content isn't hidden behind fixed footer
+    // Render Enhanced UI
     els.productDetailPage.innerHTML = `
         <div class="bg-white dark:bg-gray-900 min-h-screen relative pb-32">
             <div class="relative">
@@ -124,35 +123,37 @@ export const showProductDetailPage = (productId) => {
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
-                    <div class="flex flex-wrap gap-2">
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">Highlights</h3>
+                    <div class="space-y-3">
                         ${highlights.map(h => `
-                            <div class="flex items-center bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-500 mr-2"></i>
-                                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">${h}</span>
+                            <div class="flex items-start p-3 bg-emerald-50/60 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100/50 dark:border-emerald-800/50">
+                                <div class="flex-shrink-0 mt-0.5 p-1 bg-emerald-100 dark:bg-emerald-800 rounded-full">
+                                    <i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i>
+                                </div>
+                                <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
                             </div>
                         `).join('')}
                     </div>
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
-                    <div class="bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        ${specs.map((s, i) => `
-                            <div class="flex justify-between p-4 text-sm ${i !== specs.length - 1 ? 'border-b border-gray-200 dark:border-gray-700' : ''}">
-                                <span class="text-gray-500 dark:text-gray-400 font-medium">${s.spec_key}</span>
-                                <span class="text-gray-900 dark:text-white font-semibold text-right">${s.spec_value}</span>
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-4">Specifications</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        ${specs.map(s => `
+                            <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col justify-center">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-2">${s.spec_value}</p>
                             </div>
                         `).join('')}
                     </div>
                 </div>
 
-                <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800">
+                <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-3xl border border-indigo-100 dark:border-indigo-800">
                     <div class="flex items-center gap-2 mb-2">
-                        <i data-lucide="qr-code" class="w-5 h-5 text-blue-600 dark:text-blue-400"></i>
-                        <h3 class="text-sm font-bold text-blue-900 dark:text-blue-100">How to Redeem</h3>
+                        <i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
+                        <h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3>
                     </div>
-                    <p class="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                    <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
                         Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.
                     </p>
                 </div>
@@ -264,10 +265,9 @@ export const closeQrModal = () => {
 export const renderEcoPointsPage = () => {
     const u = state.currentUser;
     if (!u) return;
-    // ... (keep existing logic)
 };
 
-// --- ASSIGN TO WINDOW AT THE VERY END ---
+// Assign to Window (Crucial for inline HTML onclick events)
 window.renderRewardsWrapper = renderRewards;
 window.showProductDetailPage = showProductDetailPage;
 window.openPurchaseModal = openPurchaseModal;
