@@ -3,575 +3,189 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EcoCampus - Green Initiative</title>
-    
+    <title>EcoCampus</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <link rel="stylesheet" href="style.css"> 
-    
     <script src="https://unpkg.com/lucide@latest"></script>
-
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        inter: ['Inter', 'sans-serif'],
-                    },
-                },
-            },
+            theme: { extend: { fontFamily: { inter: ['Inter', 'sans-serif'] } } }
         }
     </script>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200 select-none">
 
     <input type="file" id="profile-upload-input" accept="image/*" class="hidden">
-    <input type="file" id="challenge-file-input" accept="image/*" class="hidden">
 
     <div id="app-loading" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white dark:bg-gray-900 transition-opacity duration-500">
-        <div class="app-loader-logo animate-pulse">
-            <img src="https://i.ibb.co/GLJzFsX/Untitled-1.png" class="w-40 h-40 object-contain" alt="EcoCampus Logo">
-        </div>
-        <p class="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-4">EcoCampus Initiative</p>
+        <div class="animate-pulse"><img src="https://i.ibb.co/GLJzFsX/Untitled-1.png" class="w-32 h-32 object-contain"></div>
+        <p class="text-xs font-bold text-gray-400 mt-4 tracking-widest uppercase">EcoCampus</p>
     </div>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-30 opacity-0 hidden transition-opacity"></div>
-    
     <div id="sidebar" class="fixed top-0 left-0 h-full w-72 bg-white dark:bg-gray-800 z-40 transform -translate-x-full flex flex-col transition-transform duration-300 shadow-2xl">
         <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-            <img id="user-avatar-sidebar" src="https://placehold.co/80x80/A3E635/FFFFFF?text=..." class="w-16 h-16 rounded-full mb-3 border-2 border-green-500 object-cover" alt="User Avatar">
-            <h2 id="user-name-sidebar" class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-1">Loading...</h2>
-            <p id="user-level-sidebar" class="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">...</p>
-            <p class="text-sm text-green-600 dark:text-green-400 font-semibold">
-                <span id="user-points-sidebar">0</span> EcoPoints
-            </p>
+            <img id="user-avatar-sidebar" src="https://placehold.co/80x80?text=..." class="w-14 h-14 rounded-full mb-3 border-2 border-green-500 object-cover">
+            <h2 id="user-name-sidebar" class="text-lg font-bold text-gray-800 dark:text-gray-100">Loading...</h2>
+            <p class="text-sm text-green-600 font-bold"><span id="user-points-sidebar">0</span> EcoPoints</p>
         </div>
-
-        <nav class="flex-grow p-4 space-y-2 overflow-y-auto">
-            <button onclick="showPage('profile')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="user" class="w-5 h-5 mr-3"></i>Profile
-            </button>
-            <button onclick="showPage('my-rewards')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="archive" class="w-5 h-5 mr-3"></i>Orders
-            </button>
-            <button onclick="showPage('history')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="history" class="w-5 h-5 mr-3"></i>History
-            </button>
-            <button onclick="showPage('leaderboard')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="users" class="w-5 h-5 mr-3"></i>Leaderboard
-            </button>
-            <button onclick="showPage('events')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="calendar" class="w-5 h-5 mr-3"></i>All Events
-            </button>
-            <button onclick="showPage('redeem-code')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="ticket" class="w-5 h-5 mr-3"></i>Redeem Code
-            </button>
-
-            <div class="pt-2 border-t border-gray-200 dark:border-gray-700"></div>
-
-            <button onclick="showPage('about')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="info" class="w-5 h-5 mr-3"></i>About Us
-            </button>
-            <button onclick="showPage('help')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="help-circle" class="w-5 h-5 mr-3"></i>Help & Support
-            </button>
-            <button onclick="showPage('change-password')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <i data-lucide="key-round" class="w-5 h-5 mr-3"></i>Change Password
-            </button>
-
-            <div class="pt-2 border-t border-gray-200 dark:border-gray-700"></div>
-            
-            <div class="flex items-center justify-between p-3 rounded-lg text-gray-700 dark:text-gray-300">
-                <div class="flex items-center">
-                    <i id="theme-icon" data-lucide="sun" class="w-5 h-5 mr-3"></i>
-                    <span id="theme-text">Light Mode</span>
-                </div>
-                <button id="theme-toggle-btn" class="relative inline-flex items-center h-6 rounded-full w-11 transition-colors bg-gray-200 dark:bg-gray-600">
-                    <span class="sr-only">Toggle theme</span>
-                    <span class="inline-block w-4 h-4 transform bg-white rounded-full transition-transform translate-x-1 dark:translate-x-6"></span>
-                </button>
-            </div>
-        </nav>
-
+        <nav class="flex-grow p-4 space-y-1 overflow-y-auto" id="sidebar-nav"></nav>
         <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-            <button onclick="handleLogout()" class="w-full bg-red-50 text-red-600 font-bold py-3 px-4 rounded-lg hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 flex items-center justify-center transition-colors">
-                <i data-lucide="log-out" class="w-5 h-5 mr-2"></i>
-                <span>Log Out</span>
-            </button>
+            <button onclick="handleLogout()" class="w-full bg-red-50 text-red-600 font-bold py-3 px-4 rounded-xl flex items-center justify-center"><i data-lucide="log-out" class="w-5 h-5 mr-2"></i>Log Out</button>
         </div>
     </div>
 
     <div class="app-container max-w-[420px] mx-auto bg-white dark:bg-gray-950 min-h-screen flex flex-col relative shadow-2xl overflow-hidden">
-
-        <header class="bg-white/90 dark:bg-gray-950/90 backdrop-blur-sm sticky top-0 z-20 p-4 border-b border-gray-200 dark:border-gray-800">
+        
+        <header class="bg-white/90 dark:bg-gray-950/90 backdrop-blur-md sticky top-0 z-20 px-4 py-3 border-b border-gray-200/50 dark:border-gray-800">
             <div class="flex justify-between items-center">
-                <div class="w-1/3">
-                    <button id="sidebar-toggle-btn" onclick="toggleSidebar()" class="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
-                        <i data-lucide="menu" class="w-6 h-6"></i>
-                    </button>
-                </div>
-                <div class="w-1/3 text-center">
-                    <button onclick="showPage('dashboard')" class="text-xl font-extrabold text-green-700 dark:text-green-500 tracking-tight">
-                        EcoCampus
-                    </button>
-                </div>
+                <div class="w-1/3"><button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"><i data-lucide="menu" class="w-6 h-6 text-gray-700 dark:text-gray-200"></i></button></div>
+                <div class="w-1/3 text-center"><h1 class="text-xl font-extrabold text-green-600 tracking-tight">EcoBirla</h1></div>
                 <div class="w-1/3 flex justify-end">
-                    <button onclick="showPage('ecopoints')" class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-full p-1 pr-3 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-transparent dark:border-gray-700">
-                        <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white mr-1">
-                            <i data-lucide="leaf" class="w-3 h-3"></i>
-                        </div>
+                    <button onclick="showPage('ecopoints')" class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-full p-1 pr-3 border border-transparent">
+                        <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white mr-1.5"><i data-lucide="leaf" class="w-3 h-3"></i></div>
                         <span id="user-points-header" class="text-sm font-bold text-gray-700 dark:text-gray-200">0</span>
                     </button>
                 </div>
             </div>
         </header>
 
-        <main class="main-content flex-grow bg-gray-50 dark:bg-gray-900 overflow-y-auto scroll-smooth pb-24">
-
-            <div id="dashboard" class="page active p-6 space-y-6">
-                <div>
-                    <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Hi, <span id="user-name-greeting">Student</span>!</h2>
-                    <p class="text-gray-600 dark:text-gray-400">Ready to make an impact today?</p>
+        <main class="main-content flex-grow bg-gray-50 dark:bg-gray-900 overflow-y-auto scroll-smooth pb-28">
+            
+            <div id="dashboard" class="page active p-5 space-y-6">
+                <div class="flex justify-between items-end">
+                    <div><h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Hi, <span id="user-name-greeting">...</span></h2><p class="text-gray-500 text-sm">Let's make an impact today.</p></div>
+                    <div id="dashboard-weather" class="text-right hidden"><i data-lucide="cloud-sun" class="w-6 h-6 text-yellow-500"></i></div>
                 </div>
 
-                <div class="glass-green-card p-5 relative overflow-hidden group">
-                    <div class="absolute top-0 right-0 opacity-10 transform translate-x-4 -translate-y-4">
-                        <i data-lucide="calendar" class="w-24 h-24"></i>
-                    </div>
-                    <div class="relative z-10">
-                        <div class="flex items-center mb-2">
-                            <span class="bg-white/20 p-1 rounded text-emerald-50 mr-2"><i data-lucide="star" class="w-4 h-4"></i></span>
-                            <h3 class="font-bold tracking-tight text-emerald-50">Featured Event</h3>
+                <div id="dashboard-event-card-container" class="hidden transform transition-all hover:scale-[1.02]">
+                    <div class="glass-green-card p-5 relative overflow-hidden shadow-lg shadow-green-500/20">
+                        <div class="absolute top-0 right-0 opacity-10 translate-x-4 -translate-y-4"><i data-lucide="calendar" class="w-32 h-32 text-white"></i></div>
+                        <div class="relative z-10">
+                            <div class="flex items-center mb-2"><span class="bg-white/20 backdrop-blur-md px-2 py-0.5 rounded text-xs font-bold text-white mr-2">FEATURED</span></div>
+                            <p id="dashboard-event-title" class="text-lg font-bold text-white mb-1 leading-tight">Loading...</p>
+                            <p id="dashboard-event-desc" class="text-sm text-green-50 mb-4 opacity-90 line-clamp-1">...</p>
+                            <button onclick="showPage('events')" class="text-xs font-bold bg-white text-green-700 px-4 py-2.5 rounded-full shadow-sm">View Details</button>
                         </div>
-                        <p id="dashboard-event-title" class="text-lg font-bold text-white mb-1">Loading...</p>
-                        <p id="dashboard-event-desc" class="text-sm text-emerald-100 mb-4 line-clamp-2">Loading details...</p>
-                        <button onclick="showPage('events')" class="text-xs font-bold bg-white text-emerald-700 px-4 py-2 rounded-full shadow hover:bg-emerald-50 transition-colors">
-                            View Events
-                        </button>
                     </div>
                 </div>
 
-                <button id="daily-checkin-button" class="w-full relative overflow-hidden p-5 rounded-2xl shadow-lg bg-gradient-to-r from-yellow-400 to-orange-400 dark:from-yellow-500 dark:to-orange-500 transition-all active:scale-95">
+                <button id="daily-checkin-button" class="w-full relative overflow-hidden p-5 rounded-2xl shadow-lg bg-gradient-to-br from-yellow-400 to-orange-500 transition-all active:scale-95 group">
                    <div class="flex items-center justify-between relative z-10">
-                       <div class="text-left">
-                            <h3 class="text-lg font-bold text-white" id="checkin-title">Daily Check-in</h3>
-                            <p class="text-sm text-white/90" id="checkin-subtitle">Tap to earn points!</p>
-                        </div>
-                        <div class="flex items-center space-x-1 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 text-white">
-                             <i data-lucide="flame" class="w-4 h-4 fill-current"></i>
-                             <span id="dashboard-streak-text-pre" class="font-bold">0</span>
-                        </div>
+                       <div class="text-left"><h3 class="text-lg font-bold text-white">Daily Check-in</h3><p class="text-sm text-white/90">Tap to maintain streak!</p></div>
+                       <div class="flex items-center space-x-1 bg-white/25 backdrop-blur-sm rounded-full px-3 py-1.5 text-white border border-white/20"><i data-lucide="flame" class="w-4 h-4 fill-current"></i><span id="dashboard-streak-text" class="font-bold">0</span></div>
                    </div>
-                   <div id="checkin-completed-state" class="hidden w-full flex-row items-center justify-between">
-                        <div class="text-left">
-                            <h3 class="text-lg font-bold text-gray-500">Checked In</h3>
-                            <p class="text-xs text-gray-400">Come back tomorrow!</p>
-                        </div>
-                        <div class="flex flex-col items-end">
-                             <span class="text-xs font-bold text-gray-400 uppercase">Streak</span>
-                             <div class="flex items-center text-orange-500">
-                                 <i data-lucide="flame" class="w-5 h-5 fill-current mr-1"></i>
-                                 <span id="dashboard-streak-text-post" class="text-xl font-bold">0</span>
-                             </div>
-                        </div>
-                   </div>
+                   <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </button>
 
                 <div class="grid grid-cols-3 gap-3">
-                    <div class="glass-card p-3 rounded-2xl text-center flex flex-col items-center justify-center min-h-[110px]">
-                        <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-2 text-green-600 dark:text-green-400">
-                            <i data-lucide="leaf" class="w-5 h-5"></i>
-                        </div>
-                        <p id="impact-co2" class="font-bold text-gray-800 dark:text-gray-100 text-sm">0 kg</p>
-                        <p class="text-[10px] uppercase font-bold text-gray-400 mt-1">CO₂ Saved</p>
-                    </div>
-                    <div class="glass-card p-3 rounded-2xl text-center flex flex-col items-center justify-center min-h-[110px]">
-                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 text-blue-600 dark:text-blue-400">
-                            <i data-lucide="recycle" class="w-5 h-5"></i>
-                        </div>
-                        <p id="impact-recycled" class="font-bold text-gray-800 dark:text-gray-100 text-sm">0 kg</p>
-                        <p class="text-[10px] uppercase font-bold text-gray-400 mt-1">Recycled</p>
-                    </div>
-                    <div class="glass-card p-3 rounded-2xl text-center flex flex-col items-center justify-center min-h-[110px]">
-                        <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-2 text-purple-600 dark:text-purple-400">
-                            <i data-lucide="calendar-check" class="w-5 h-5"></i>
-                        </div>
-                        <p id="impact-events" class="font-bold text-gray-800 dark:text-gray-100 text-sm">0</p>
-                        <p class="text-[10px] uppercase font-bold text-gray-400 mt-1">Events</p>
-                    </div>
+                    <div class="glass-card p-4 rounded-2xl text-center flex flex-col items-center justify-center"><div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-2 text-green-600"><i data-lucide="leaf" class="w-5 h-5"></i></div><p id="impact-co2" class="font-bold text-gray-800 dark:text-white text-sm">0</p><p class="text-[10px] font-bold text-gray-400 uppercase mt-1">CO2 Saved</p></div>
+                    <div class="glass-card p-4 rounded-2xl text-center flex flex-col items-center justify-center"><div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2 text-blue-600"><i data-lucide="recycle" class="w-5 h-5"></i></div><p id="impact-recycled" class="font-bold text-gray-800 dark:text-white text-sm">0</p><p class="text-[10px] font-bold text-gray-400 uppercase mt-1">Plastic</p></div>
+                    <div class="glass-card p-4 rounded-2xl text-center flex flex-col items-center justify-center"><div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-2 text-purple-600"><i data-lucide="calendar-check" class="w-5 h-5"></i></div><p id="impact-events" class="font-bold text-gray-800 dark:text-white text-sm">0</p><p class="text-[10px] font-bold text-gray-400 uppercase mt-1">Events</p></div>
                 </div>
             </div>
 
-            <div id="profile" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Your Profile</h2>
-                <div class="glass-card rounded-3xl overflow-hidden shadow-sm mb-6">
-                    <div class="h-24 bg-gradient-to-r from-green-400 to-emerald-600"></div>
-                    <div class="px-6 pb-6 -mt-12 text-center relative">
-                        <div class="relative inline-block group cursor-pointer" onclick="document.getElementById('profile-upload-input').click()">
-                            <img id="profile-avatar" src="https://placehold.co/112x112/A3E635/FFFFFF?text=..." class="w-24 h-24 rounded-full border-4 border-white dark:border-gray-800 object-cover shadow-md">
-                            <div class="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <i data-lucide="camera" class="w-6 h-6 text-white"></i>
-                            </div>
-                        </div>
-                        
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mt-3 flex items-center justify-center gap-1">
-                            <span id="profile-name">Student</span>
-                        </h3>
-                        <p id="profile-email" class="text-sm text-gray-500 dark:text-gray-400">...</p>
-                        
-                        <div class="mt-6 bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
-                            <div class="flex justify-between items-end mb-2">
-                                <span id="profile-level-title" class="text-sm font-bold text-green-600 dark:text-green-400">Starter</span>
-                                <span class="text-xs text-gray-400">Level <span id="profile-level-number">1</span></span>
-                            </div>
-                            <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-1">
-                                <div id="profile-level-progress" class="bg-green-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="glass-card p-6 rounded-3xl">
-                    <h4 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Student Details</h4>
-                    <div class="space-y-4 text-sm">
-                        <div class="flex justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
-                            <span class="text-gray-500">Student ID</span>
-                            <span id="profile-student-id" class="font-semibold dark:text-gray-200">...</span>
-                        </div>
-                        <div class="flex justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
-                            <span class="text-gray-500">Course</span>
-                            <span id="profile-course" class="font-semibold dark:text-gray-200">...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="leaderboard" class="page p-6 relative min-h-screen">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6 text-center">Hall of Champions</h2>
-
-                <div class="bg-gray-200 dark:bg-gray-800 p-1 rounded-full flex mb-8 relative z-10">
-                    <button id="leaderboard-tab-student" onclick="showLeaderboardTab('student')" class="flex-1 py-2 rounded-full text-sm font-bold shadow-sm bg-white dark:bg-gray-700 text-green-600 dark:text-green-400 transition-all">
-                        Students
-                    </button>
-                    <button id="leaderboard-tab-dept" onclick="showLeaderboardTab('department')" class="flex-1 py-2 rounded-full text-sm font-bold text-gray-500 hover:text-gray-700 dark:text-gray-400 transition-all">
-                        Departments
-                    </button>
-                </div>
-
-                <div id="leaderboard-content-student" class="relative z-10">
-                    <div id="lb-podium-container" class="podium-wrapper flex justify-center items-end gap-2 mb-8 min-h-[180px]">
-                         </div>
-                    <div id="lb-list-container" class="space-y-3 pb-10">
-                         </div>
-                </div>
-
-                <div id="leaderboard-content-department" class="hidden relative z-10 space-y-3">
-                    <p class="text-center text-gray-500">Loading department stats...</p>
-                </div>
+            <div id="profile" class="page p-6"><h2 class="text-2xl font-bold dark:text-white mb-6">Profile</h2><div id="profile-content"></div></div>
+            
+            <div id="leaderboard" class="page p-6">
+                <h2 class="text-2xl font-bold dark:text-white mb-6 text-center">Leaderboard</h2>
+                <div class="bg-gray-100 dark:bg-gray-800 p-1 rounded-full flex mb-6"><button id="lb-tab-student" onclick="switchLb('student')" class="flex-1 py-2.5 rounded-full text-sm font-bold bg-white shadow-sm text-green-600 transition-all">Students</button><button id="lb-tab-dept" onclick="switchLb('dept')" class="flex-1 py-2.5 rounded-full text-sm font-bold text-gray-500 hover:text-gray-700 transition-all">Departments</button></div>
+                <div id="lb-content" class="space-y-2"></div>
             </div>
 
             <div id="challenges" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Active Challenges</h2>
-                <div id="challenges-page-list" class="space-y-4">
-                    <p class="text-center text-gray-500">Loading challenges...</p>
-                </div>
+                <h2 class="text-2xl font-bold dark:text-white mb-6">Challenges</h2>
+                <div id="daily-quiz-container" class="mb-8"></div>
+                <div class="flex items-center justify-between mb-4"><h3 class="font-bold text-gray-500 text-xs uppercase tracking-wider">Active Tasks</h3></div>
+                <div id="challenges-list" class="space-y-4"></div>
+            </div>
+
+            <div id="events" class="page p-6">
+                <h2 class="text-2xl font-bold dark:text-white mb-6">Upcoming Events</h2>
+                <div id="event-list" class="space-y-6 pb-10"></div>
             </div>
 
             <div id="rewards" class="page p-6">
-                <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Eco-Store</h2>
-                    <div class="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-xs font-bold">
-                        Rewards
-                    </div>
-                </div>
-
-                <div class="space-y-3 mb-6">
-                    <div class="relative">
-                        <i data-lucide="search" class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"></i>
-                        <input id="store-search-input" type="text" placeholder="Search rewards..." 
-                               class="w-full pl-12 pr-4 py-3 rounded-2xl border-none bg-white dark:bg-gray-800 shadow-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-green-500 outline-none">
-                    </div>
-                    <select id="sort-by-select" class="w-full px-4 py-3 rounded-2xl border-none bg-white dark:bg-gray-800 shadow-sm text-gray-600 dark:text-gray-300 outline-none focus:ring-2 focus:ring-green-500 appearance-none">
-                        <option value="popularity">Most Popular</option>
-                        <option value="points-lh">Points: Low to High</option>
-                        <option value="points-hl">Points: High to Low</option>
-                    </select>
-                </div>
-
-                <div id="product-grid" class="grid grid-cols-2 gap-4 pb-20">
-                    </div>
+                <div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold dark:text-white">Eco-Store</h2><span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold">Rewards</span></div>
+                <div class="relative mb-6"><i data-lucide="search" class="absolute left-4 top-3.5 w-5 h-5 text-gray-400"></i><input id="store-search" type="text" placeholder="Search rewards..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl border-none bg-white dark:bg-gray-800 shadow-sm dark:text-white focus:ring-2 focus:ring-green-500 outline-none"></div>
+                <div id="product-grid" class="grid grid-cols-2 gap-4 pb-20"></div>
             </div>
 
-            <div id="my-rewards" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">My Orders</h2>
-                <div id="all-rewards-list" class="space-y-4">
-                    </div>
-            </div>
+            <div id="my-rewards" class="page p-6"><h2 class="text-2xl font-bold dark:text-white mb-6">My Orders</h2><div id="order-list" class="space-y-4"></div></div>
             
-            <div id="events" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Upcoming Events</h2>
-                <div id="event-list" class="space-y-4">
-                     </div>
-            </div>
-
-            <div id="history" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Activity History</h2>
-                <div id="history-list" class="space-y-3">
-                     </div>
-            </div>
-
-            <div id="change-password" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Change Password</h2>
-                <div class="glass-card p-6 rounded-2xl">
-                    <form id="change-password-form" class="space-y-6">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
-                            <input id="new-password" type="password" required
-                                   class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:border-green-500 dark:text-white"
-                                   placeholder="Min 6 characters">
-                        </div>
-                        <div id="password-message" class="text-sm text-center min-h-[20px]"></div>
-                        <button type="submit" id="change-password-button"
-                                class="w-full bg-green-600 text-white font-bold py-3 rounded-xl hover:bg-green-700 transition-colors">
-                            Update Password
-                        </button>
-                    </form>
-                </div>
-            </div>
-
+            <div id="history" class="page p-6"><h2 class="text-2xl font-bold dark:text-white mb-6">History</h2><div id="history-list" class="space-y-3"></div></div>
+            
             <div id="redeem-code" class="page p-6">
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Redeem Code</h2>
-                <div class="glass-card p-6 rounded-2xl text-center">
-                    <div class="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-600 dark:text-purple-400">
-                        <i data-lucide="ticket" class="w-8 h-8"></i>
-                    </div>
-                    <p class="text-gray-600 dark:text-gray-300 mb-6 text-sm">Enter your event code to claim bonus points.</p>
-                    <form id="redeem-code-form" class="space-y-4">
-                        <input id="redeem-input" type="text" maxlength="10" required
-                               class="w-full text-center text-2xl tracking-widest uppercase px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:border-green-500 outline-none dark:text-white"
-                               placeholder="CODE123">
-                        <button type="submit" id="redeem-submit-btn" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition-colors">
-                            Claim Points
-                        </button>
-                        <div id="redeem-message" class="text-sm min-h-[20px]"></div>
-                    </form>
+                <h2 class="text-2xl font-bold dark:text-white mb-6">Redeem Code</h2>
+                <div class="glass-card p-8 rounded-3xl text-center">
+                    <div class="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-600"><i data-lucide="ticket" class="w-8 h-8"></i></div>
+                    <input id="redeem-input" type="text" class="w-full text-center text-2xl tracking-[0.2em] uppercase font-mono px-4 py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 outline-none focus:border-green-500 transition-colors dark:text-white mb-4" placeholder="CODE123">
+                    <button onclick="handleRedeem()" class="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-green-200 dark:shadow-none active:scale-95 transition-transform">Claim Points</button>
                 </div>
             </div>
 
-            <div id="product-detail-page" class="page dark:bg-gray-900"></div>
-            <div id="ecopoints" class="page p-6"></div>
-            <div id="about" class="page p-6">
-                <h2 class="text-2xl font-bold dark:text-white mb-4">About</h2>
-                <p class="text-gray-600 dark:text-gray-400">EcoCampus V8.0. Empowering students to build a sustainable future.</p>
-            </div>
-            <div id="help" class="page p-6">
-                <h2 class="text-2xl font-bold dark:text-white mb-4">Help</h2>
-                <p class="text-gray-600 dark:text-gray-400">Contact support@ecocampus.edu for assistance.</p>
-            </div>
-
+            <div id="product-detail-page" class="page bg-white dark:bg-gray-900 min-h-screen absolute inset-0 z-30 hidden overflow-y-auto"></div>
         </main>
 
-        <button onclick="openChatbotModal()" class="fixed z-20 bottom-24 right-6 w-14 h-14 rounded-full shadow-xl hover:scale-105 transition-transform flex items-center justify-center bg-white dark:bg-gray-800 p-1">
-             <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="EcoBot" class="w-full h-full object-contain">
-        </button>
-
-        <nav class="glass-bottom-bar border-t border-gray-200/70 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur-md z-30">
-            <div class="flex justify-around items-center h-16">
-                <button onclick="showPage('dashboard')" class="nav-item active flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                    <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
-                    <span class="text-[10px] font-medium mt-1">Home</span>
-                </button>
-                <button onclick="showPage('leaderboard')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                    <i data-lucide="trophy" class="w-6 h-6"></i>
-                    <span class="text-[10px] font-medium mt-1">Rank</span>
-                </button>
-                <button onclick="showPage('challenges')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                    <i data-lucide="target" class="w-6 h-6"></i>
-                    <span class="text-[10px] font-medium mt-1">Tasks</span>
-                </button>
-                <button onclick="showPage('rewards')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-                    <i data-lucide="shopping-bag" class="w-6 h-6"></i>
-                    <span class="text-[10px] font-medium mt-1">Store</span>
-                </button>
+        <nav class="glass-bottom-bar border-t border-gray-200/60 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl z-30 absolute bottom-0 w-full">
+            <div class="flex justify-around items-center h-[4.5rem] pb-1">
+                <button onclick="showPage('dashboard')" class="nav-item active flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 transition-colors group"><div class="p-1 rounded-full group-hover:bg-green-50 dark:group-hover:bg-gray-800 transition-colors"><i data-lucide="layout-dashboard" class="w-6 h-6"></i></div><span class="text-[10px] font-bold mt-1">Home</span></button>
+                <button onclick="showPage('leaderboard')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 transition-colors group"><div class="p-1 rounded-full group-hover:bg-green-50 dark:group-hover:bg-gray-800 transition-colors"><i data-lucide="trophy" class="w-6 h-6"></i></div><span class="text-[10px] font-bold mt-1">Rank</span></button>
+                <button onclick="showPage('challenges')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 transition-colors group"><div class="p-1 rounded-full group-hover:bg-green-50 dark:group-hover:bg-gray-800 transition-colors"><i data-lucide="target" class="w-6 h-6"></i></div><span class="text-[10px] font-bold mt-1">Tasks</span></button>
+                <button onclick="showPage('rewards')" class="nav-item flex-1 flex flex-col items-center justify-center text-gray-400 hover:text-green-600 transition-colors group"><div class="p-1 rounded-full group-hover:bg-green-50 dark:group-hover:bg-gray-800 transition-colors"><i data-lucide="shopping-bag" class="w-6 h-6"></i></div><span class="text-[10px] font-bold mt-1">Store</span></button>
             </div>
         </nav>
     </div>
 
-    <div id="checkin-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center opacity-0 invisible transition-all duration-300" onclick="document.getElementById('checkin-modal').classList.add('invisible', 'opacity-0')">
-        <div id="checkin-modal-content" class="bg-white dark:bg-gray-900 rounded-t-3xl w-full max-w-md p-6 transform translate-y-full transition-transform duration-300" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Daily Streak</h3>
-                <button onclick="document.getElementById('checkin-modal').classList.add('invisible', 'opacity-0')" class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-            <div class="text-center mb-8">
-                <p class="text-gray-500 dark:text-gray-400 mb-1">Current Streak</p>
-                <p id="checkin-modal-streak" class="text-6xl font-extrabold text-orange-500 tracking-tighter">0</p>
-                <p class="text-sm font-bold text-orange-400 uppercase tracking-wide mt-1">Days</p>
-            </div>
-            <div id="checkin-modal-calendar" class="flex justify-center gap-2 mb-8"></div>
-            <div id="checkin-modal-button-container"></div>
+    <div id="checkin-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white dark:bg-gray-900 rounded-t-3xl w-full max-w-md p-6 transform translate-y-full transition-transform duration-300 class-modal-content">
+            <div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold dark:text-white">Daily Check-in</h3><button onclick="closeCheckinModal()" class="p-2 bg-gray-100 dark:bg-gray-800 rounded-full"><i data-lucide="x" class="w-5 h-5 text-gray-500"></i></button></div>
+            <div id="checkin-calendar" class="flex justify-center gap-3 mb-8"></div>
+            <button onclick="confirmCheckin()" class="w-full bg-green-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-green-200 dark:shadow-none active:scale-95 transition-transform">Confirm Check-in</button>
         </div>
     </div>
-
-    <div id="purchase-modal-overlay" class="fixed inset-0 bg-black/60 z-40 hidden backdrop-blur-sm" onclick="this.classList.add('hidden')"></div>
-    <div id="purchase-modal" class="fixed bottom-0 left-0 right-0 z-50 hidden">
-        </div>
-
+    
     <div id="camera-modal" class="fixed inset-0 bg-black z-[60] hidden flex flex-col">
         <div class="relative flex-grow bg-black flex items-center justify-center overflow-hidden">
-            <video id="camera-feed" autoplay playsinline class="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"></video>
+            <video id="camera-feed" autoplay playsinline class="absolute inset-0 w-full h-full object-cover"></video>
             <canvas id="camera-canvas" class="hidden"></canvas>
         </div>
         <div class="bg-black/80 backdrop-blur-md p-8 pb-12 flex justify-around items-center">
-            <button onclick="closeCameraModal()" class="text-white p-4 rounded-full bg-gray-800 hover:bg-gray-700">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
-            <button onclick="capturePhoto()" class="p-1.5 rounded-full border-4 border-white transition-transform active:scale-95">
-                <div class="w-16 h-16 bg-white rounded-full"></div>
-            </button>
-            <button class="text-white p-4 rounded-full bg-gray-800 opacity-50 cursor-not-allowed">
-                <i data-lucide="refresh-cw" class="w-6 h-6"></i>
-            </button>
+            <button onclick="closeCameraModal()" class="text-white p-4 rounded-full bg-gray-800 hover:bg-gray-700"><i data-lucide="x" class="w-6 h-6"></i></button>
+            <button onclick="capturePhoto()" class="p-1.5 rounded-full border-4 border-white active:scale-95 transition-transform"><div class="w-16 h-16 bg-white rounded-full"></div></button>
+            <button onclick="switchCamera()" class="text-white p-4 rounded-full bg-gray-800 hover:bg-gray-700"><i data-lucide="refresh-cw" class="w-6 h-6"></i></button>
         </div>
     </div>
 
-    <div id="chatbot-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center opacity-0 invisible transition-all duration-300" onclick="closeChatbotModal()">
-        <div class="bg-white dark:bg-gray-900 rounded-t-3xl w-full max-w-md h-[75vh] flex flex-col shadow-2xl transform translate-y-full transition-transform duration-300" id="chatbot-modal-content" onclick="event.stopPropagation()">
-            <div class="flex items-center justify-between p-4 border-b dark:border-gray-800">
-                <div class="flex items-center">
-                    <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                        <i data-lucide="bot" class="w-5 h-5 text-green-600"></i>
-                    </div>
-                    <h3 class="font-bold text-gray-900 dark:text-gray-100">EcoBot Assistant</h3>
-                </div>
-                <button onclick="closeChatbotModal()" class="text-gray-400 hover:text-gray-600">
-                    <i data-lucide="x" class="w-6 h-6"></i>
-                </button>
+    <div id="quiz-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center hidden px-4">
+        <div class="bg-white dark:bg-gray-900 w-full max-w-md p-6 rounded-3xl shadow-2xl relative transform scale-95 transition-transform duration-200" id="quiz-modal-card">
+            <button onclick="closeQuizModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-purple-600"><i data-lucide="brain" class="w-8 h-8"></i></div>
+                <h3 class="text-xl font-bold dark:text-white">Daily Eco Quiz</h3>
+                <p class="text-sm text-gray-500">Answer correctly to earn points!</p>
             </div>
-            <div id="chatbot-messages" class="flex-grow overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900/50">
-                <div class="flex justify-start">
-                    <div class="bg-white dark:bg-gray-800 p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-700 max-w-[80%]">
-                        <p class="text-sm text-gray-800 dark:text-gray-200">Hello! Ask me anything about recycling or your campus eco-points.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="p-4 border-t dark:border-gray-800 bg-white dark:bg-gray-900 pb-8">
-                <form id="chatbot-form" class="flex gap-2">
-                    <input id="chatbot-input" type="text" placeholder="Type a message..." class="flex-grow px-4 py-3 rounded-full bg-gray-100 dark:bg-gray-800 border-none focus:ring-2 focus:ring-green-500 outline-none dark:text-white">
-                    <button type="submit" class="bg-green-600 text-white p-3 rounded-full hover:bg-green-700 transition-colors">
-                        <i data-lucide="send" class="w-5 h-5"></i>
-                    </button>
-                </form>
-            </div>
+            <div id="quiz-content" class="space-y-3"></div>
         </div>
     </div>
-
-    <div id="qr-modal-overlay" class="hidden fixed inset-0 bg-black/80 z-[60]" onclick="this.classList.add('hidden')"></div>
-    <div id="qr-modal" class="hidden fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-2xl z-[70] w-80 text-center"></div>
+    
+    <div id="participants-modal" class="fixed inset-0 z-50 bg-black/60 flex items-end justify-center hidden">
+        <div class="bg-white dark:bg-gray-900 rounded-t-3xl w-full max-w-md p-6 h-[60vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold dark:text-white">Attendees</h3><button onclick="document.getElementById('participants-modal').classList.add('hidden')" class="bg-gray-100 p-2 rounded-full"><i data-lucide="x" class="w-5 h-5 text-gray-500"></i></button></div>
+            <div id="participants-list" class="overflow-y-auto flex-grow space-y-2 pr-2"></div>
+        </div>
+    </div>
 
     <script type="module" src="supabase-client.js"></script>
-
+    <script type="module" src="state.js"></script>
+    <script type="module" src="utils.js"></script>
+    <script type="module" src="dashboard.js"></script>
+    <script type="module" src="store.js"></script>
+    <script type="module" src="social.js"></script>
+    <script type="module" src="challenges.js"></script>
     <script type="module" src="app.js"></script>
-
-    <script>
-        // UI Helpers not strictly dependent on Backend
-        
-        // Theme Toggle Logic
-        const themeBtn = document.getElementById('theme-toggle-btn');
-        const html = document.documentElement;
-        
-        if(themeBtn) {
-            themeBtn.addEventListener('click', () => {
-                html.classList.toggle('dark');
-                const isDark = html.classList.contains('dark');
-                localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
-                updateThemeUI(isDark);
-            });
-        }
-
-        function updateThemeUI(isDark) {
-            const txt = document.getElementById('theme-text');
-            const icon = document.getElementById('theme-icon');
-            if(txt) txt.textContent = isDark ? 'Dark Mode' : 'Light Mode';
-            if(icon) {
-                icon.setAttribute('data-lucide', isDark ? 'moon' : 'sun');
-                if(window.lucide) window.lucide.createIcons();
-            }
-        }
-
-        // Init Theme
-        const savedTheme = localStorage.getItem('eco-theme');
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-            html.classList.add('dark');
-            updateThemeUI(true);
-        }
-
-        // Chatbot Logic (UI only)
-        window.openChatbotModal = () => {
-            const modal = document.getElementById('chatbot-modal');
-            const content = document.getElementById('chatbot-modal-content');
-            modal.classList.remove('invisible', 'opacity-0');
-            content.classList.remove('translate-y-full');
-        };
-
-        window.closeChatbotModal = () => {
-            const modal = document.getElementById('chatbot-modal');
-            const content = document.getElementById('chatbot-modal-content');
-            content.classList.add('translate-y-full');
-            setTimeout(() => modal.classList.add('invisible', 'opacity-0'), 300);
-        };
-
-        document.getElementById('chatbot-form')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const input = document.getElementById('chatbot-input');
-            const container = document.getElementById('chatbot-messages');
-            if(!input.value.trim()) return;
-            
-            // User Msg
-            container.innerHTML += `<div class="flex justify-end"><div class="bg-green-600 text-white p-3 rounded-2xl rounded-tr-none max-w-[80%]"><p class="text-sm">${input.value}</p></div></div>`;
-            input.value = '';
-            container.scrollTop = container.scrollHeight;
-
-            // Bot Msg
-            setTimeout(() => {
-                container.innerHTML += `<div class="flex justify-start"><div class="bg-white dark:bg-gray-800 p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-700 max-w-[80%]"><p class="text-sm text-gray-800 dark:text-gray-200">I am a demo bot. I can't process that yet!</p></div></div>`;
-                container.scrollTop = container.scrollHeight;
-            }, 800);
-        });
-
-        // Tab Switching Logic (UI Only)
-        window.showLeaderboardTab = (tab) => {
-            const sContent = document.getElementById('leaderboard-content-student');
-            const dContent = document.getElementById('leaderboard-content-department');
-            const sBtn = document.getElementById('leaderboard-tab-student');
-            const dBtn = document.getElementById('leaderboard-tab-dept');
-
-            if(tab === 'department') {
-                sContent.classList.add('hidden');
-                dContent.classList.remove('hidden');
-                dBtn.classList.add('bg-white', 'dark:bg-gray-700', 'text-green-600', 'shadow-sm');
-                dBtn.classList.remove('text-gray-500');
-                sBtn.classList.remove('bg-white', 'dark:bg-gray-700', 'text-green-600', 'shadow-sm');
-                sBtn.classList.add('text-gray-500');
-            } else {
-                dContent.classList.add('hidden');
-                sContent.classList.remove('hidden');
-                sBtn.classList.add('bg-white', 'dark:bg-gray-700', 'text-green-600', 'shadow-sm');
-                sBtn.classList.remove('text-gray-500');
-                dBtn.classList.remove('bg-white', 'dark:bg-gray-700', 'text-green-600', 'shadow-sm');
-                dBtn.classList.add('text-gray-500');
-            }
-            // Trigger data load if necessary (handled in app.js)
-            if(window.Social && window.Social.loadLeaderboardData) window.Social.loadLeaderboardData();
-        };
-    </script>
 </body>
 </html>
