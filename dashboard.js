@@ -1,6 +1,6 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { getTickImg, getPlaceholderImage, getUserInitials } from './utils.js';
+import { getTickImg } from './utils.js';
 
 export const loadDashboardData = async () => {
     try {
@@ -8,106 +8,116 @@ export const loadDashboardData = async () => {
         const today = new Date().toISOString().split('T')[0];
 
         const [
-            { data: checkinData, error: checkinError },
-            { data: streakData, error: streakError },
-            { data: impactData, error: impactError },
-            { data: eventData, error: eventError }
+            { data: checkinData },
+            { data: streakData },
+            { data: impactData },
+            { data: eventData }
         ] = await Promise.all([
-            supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', today).limit(1),
+            supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', today),
             supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
             supabase.from('user_impact').select('*').eq('user_id', userId).single(),
-            supabase.from('events').select('title, description').order('start_at', { ascending: true }).limit(1)
+            // Fetch only future events
+            supabase.from('events').select('*').gte('start_at', new Date().toISOString()).order('start_at', { ascending: true }).limit(1)
         ]);
-        
-        if (checkinError && checkinError.code !== 'PGRST116') console.error('Checkin Load Error:', checkinError.message);
 
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
-        state.featuredEvent = (eventData && eventData.length > 0) ? eventData[0] : { title: "No upcoming events", description: "Check back soon!" };
+        state.featuredEvent = (eventData && eventData.length > 0) ? eventData[0] : null;
         
-    } catch (err) {
-        console.error('Dashboard Data Error:', err);
-    }
+    } catch (err) { console.error('Dash Error', err); }
 };
 
 export const renderDashboard = () => {
-    if (!state.currentUser) return; 
+    if (!state.currentUser) return;
     
-    // UI Updates
-    document.getElementById('user-points-header').textContent = state.currentUser.current_points;
+    // User
     document.getElementById('user-name-greeting').textContent = state.currentUser.full_name;
+    document.getElementById('user-points-header').textContent = state.currentUser.current_points;
     document.getElementById('user-name-sidebar').innerHTML = `${state.currentUser.full_name} ${getTickImg(state.currentUser.tick_type)}`;
     document.getElementById('user-points-sidebar').textContent = state.currentUser.current_points;
-    document.getElementById('user-avatar-sidebar').src = state.currentUser.profile_img_url || getPlaceholderImage('80x80', getUserInitials(state.currentUser.full_name));
+    document.getElementById('user-avatar-sidebar').src = state.currentUser.profile_img_url || 'https://placehold.co/80x80?text=User';
 
-    document.getElementById('impact-recycled').textContent = `${(state.currentUser.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
-    document.getElementById('impact-co2').textContent = `${(state.currentUser.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
-    document.getElementById('impact-events').textContent = state.currentUser.impact?.events_attended || 0;
-    
-    document.getElementById('dashboard-event-title').textContent = state.featuredEvent?.title || '...';
-    document.getElementById('dashboard-event-desc').textContent = state.featuredEvent?.description || '...';
+    // Impact
+    const imp = state.currentUser.impact || {};
+    document.getElementById('impact-recycled').textContent = `${(imp.total_plastic_kg || 0)}kg`;
+    document.getElementById('impact-co2').textContent = `${(imp.co2_saved_kg || 0)}kg`;
+    document.getElementById('impact-events').textContent = imp.events_attended || 0;
 
-    renderCheckinButtonState();
-};
-
-const renderCheckinButtonState = () => {
-    const streak = state.currentUser.checkInStreak || 0;
-    document.getElementById('dashboard-streak-text-pre').textContent = streak;
-    document.getElementById('dashboard-streak-text-post').textContent = streak;
-    
-    const btn = document.getElementById('daily-checkin-button');
-    if (state.currentUser.isCheckedInToday) {
-        btn.classList.add('checkin-completed'); 
-        btn.classList.remove('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
-        btn.onclick = null; 
+    // Logic: Hide Event Card if null
+    const evtContainer = document.getElementById('dashboard-event-card-container');
+    if (state.featuredEvent) {
+        evtContainer.classList.remove('hidden');
+        document.getElementById('dashboard-event-title').textContent = state.featuredEvent.title;
+        document.getElementById('dashboard-event-desc').textContent = state.featuredEvent.location || 'Campus';
     } else {
-        btn.classList.remove('checkin-completed');
-        btn.classList.add('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
-        btn.onclick = openCheckinModal;
+        evtContainer.classList.add('hidden');
     }
-};
 
-// Check-in Modal Logic
-export const openCheckinModal = () => {
-    if (state.currentUser.isCheckedInToday) return;
-    const modal = document.getElementById('checkin-modal');
-    modal.classList.add('open');
-    modal.classList.remove('invisible');
+    // Check-in Button State
+    const btn = document.getElementById('daily-checkin-button');
+    const streakText = document.getElementById('dashboard-streak-text');
+    streakText.textContent = state.currentUser.checkInStreak;
     
-    const cal = document.getElementById('checkin-modal-calendar');
-    cal.innerHTML = '';
-    for (let i = -3; i <= 3; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() + i);
-        const isToday = i === 0;
-        cal.innerHTML += `
-            <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
-                <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
-                <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
-            </div>
-        `;
+    if(state.currentUser.isCheckedInToday) {
+        btn.classList.add('opacity-60', 'cursor-default');
+        btn.onclick = null;
+        btn.querySelector('h3').textContent = "Streak Active";
+        btn.querySelector('p').textContent = "Come back tomorrow";
+    } else {
+        btn.classList.remove('opacity-60', 'cursor-default');
+        btn.onclick = openCheckinModal;
+        btn.querySelector('h3').textContent = "Daily Check-in";
+        btn.querySelector('p').textContent = "Tap to maintain streak!";
     }
-    document.getElementById('checkin-modal-streak').textContent = `${state.currentUser.checkInStreak} Days`;
-    document.getElementById('checkin-modal-button-container').innerHTML = `
-        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
-            Check-in &amp; Earn ${state.checkInReward} Points
-        </button>
-    `;
 };
 
-export const handleDailyCheckin = async (refreshCallback) => {
-    const btn = document.querySelector('#checkin-modal-button-container button');
-    btn.disabled = true; btn.textContent = 'Checking in...';
-    try {
-        const { error } = await supabase.from('daily_checkins').insert({ user_id: state.currentUser.id, points_awarded: state.checkInReward });
-        if (error) throw error;
-        state.currentUser.isCheckedInToday = true;
-        document.getElementById('checkin-modal').classList.remove('open');
-        setTimeout(() => document.getElementById('checkin-modal').classList.add('invisible'), 300);
-        if(refreshCallback) refreshCallback(); // Call app.js refresh
-    } catch (err) {
-        alert(`Failed to check in: ${err.message}`);
-        btn.disabled = false;
+export const openCheckinModal = () => {
+    const modal = document.getElementById('checkin-modal');
+    const content = modal.querySelector('.bg-white');
+    modal.classList.remove('hidden');
+    
+    // Animate
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('translate-y-full');
+    }, 10);
+    
+    // Render Calendar
+    const cal = document.getElementById('checkin-calendar');
+    cal.innerHTML = '';
+    for(let i=-3; i<=3; i++) {
+        const d = new Date(); d.setDate(d.getDate() + i);
+        const isToday = i===0;
+        cal.innerHTML += `
+            <div class="flex flex-col items-center ${isToday ? 'font-bold text-green-600' : 'text-gray-400'}">
+                <span class="text-xs mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
+                <div class="w-8 h-8 rounded-full flex items-center justify-center ${isToday ? 'bg-green-100' : ''}">${d.getDate()}</div>
+            </div>`;
     }
+};
+
+export const closeCheckinModal = () => {
+    const modal = document.getElementById('checkin-modal');
+    const content = modal.querySelector('.bg-white');
+    modal.classList.add('opacity-0');
+    content.classList.add('translate-y-full');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+};
+
+export const confirmCheckin = async () => {
+    try {
+        const { error } = await supabase.from('daily_checkins').insert({ 
+            user_id: state.currentUser.id, points_awarded: 10 
+        });
+        if(error) throw error;
+        
+        state.currentUser.isCheckedInToday = true;
+        state.currentUser.current_points += 10;
+        state.currentUser.checkInStreak += 1;
+        
+        closeCheckinModal();
+        renderDashboard();
+        alert('Checked in! +10 Points');
+    } catch(e) { alert('Already checked in or error.'); }
 };
