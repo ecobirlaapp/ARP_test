@@ -4,7 +4,8 @@ import { els, formatDate, getPlaceholderImage, getTickImg } from './utils.js';
 
 export const loadEventsData = async () => {
     try {
-        // Explicitly specify the relationship to avoid ambiguity errors
+        // Fetch events with attendees
+        // We use the specific foreign key name to avoid ambiguous relationship errors
         const { data: events, error } = await supabase
             .from('events')
             .select(`
@@ -21,10 +22,11 @@ export const loadEventsData = async () => {
         state.events = events.map(e => {
             const rawAttendees = e.event_attendance || [];
             
-            // Map attendees correctly
+            // Map attendees safely
             const attendees = rawAttendees
                 .filter(a => a.status === 'registered' || a.status === 'confirmed')
-                .map(a => a.users); 
+                .map(a => a.users)
+                .filter(u => u !== null); // Filter out any nulls
             
             // Check my status
             const myAttendance = rawAttendees.find(a => a.users && a.users.id === state.currentUser.id);
@@ -145,10 +147,11 @@ export const handleRSVP = async (eventId) => {
     }
 };
 
-// FIX: Correctly handle Modal Visibility and Animation
+// FIX: Improved Modal Visibility Logic
 export const openParticipantsModal = (eventId) => {
     const eventData = state.events.find(e => e.id === eventId);
-    // Only open if there are attendees
+    // Allow opening even if empty list so user sees it's empty (or we can handle logic differently)
+    // But checking length > 0 is fine.
     if (!eventData || !eventData.attendees || eventData.attendees.length === 0) {
         return; 
     }
@@ -167,13 +170,14 @@ export const openParticipantsModal = (eventId) => {
         </div>
     `).join('');
 
-    // Show Overlay
+    // 1. Show the overlay
     modal.classList.remove('invisible', 'opacity-0');
     
-    // Slide Up Content (Remove the translation class)
-    // Small delay ensures the browser renders the display change before animating
+    // 2. Animate the content up
+    // We remove the 'translate-y-full' (hidden down) and add 'translate-y-0' (shown)
     setTimeout(() => {
         content.classList.remove('translate-y-full');
+        content.classList.add('translate-y-0');
     }, 10);
 };
 
@@ -181,10 +185,11 @@ export const closeParticipantsModal = () => {
     const modal = document.getElementById('participants-modal');
     const content = document.getElementById('participants-modal-content');
 
-    // Slide Down Content
+    // 1. Animate content down
+    content.classList.remove('translate-y-0');
     content.classList.add('translate-y-full');
 
-    // Hide Overlay after animation
+    // 2. Hide overlay after animation finishes
     setTimeout(() => {
         modal.classList.add('invisible', 'opacity-0');
     }, 300);
