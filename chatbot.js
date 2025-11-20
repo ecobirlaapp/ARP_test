@@ -4,11 +4,11 @@ import { els } from './utils.js';
 // ==========================================
 // ⚙️ CONFIGURATION
 // ==========================================
-// PASTE YOUR NEW KEY HERE (The one ending in ...yaU or ...JCCU)
-const GEMINI_API_KEY = 'AIzaSyCJKZPm8hQafgfEoFRN4_P04gkcdBv_yaU'; 
+// 1. Get key from: https://platform.openai.com/api-keys
+// 2. Ensure you have billing credits ($5 min)
+const OPENAI_API_KEY = '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'; 
 
-// FIX: Changed model from 'gemini-pro' to 'gemini-1.5-flash' (The new standard)
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const API_URL = 'https://api.openai.com/v1/chat/completions';
 
 // ==========================================
 // 🧠 AI LOGIC
@@ -16,50 +16,72 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 const getSystemPrompt = () => {
     const user = state.currentUser || { full_name: 'Student', current_points: 0 };
+    
     return `
-    You are EcoBot, the AI assistant for EcoCampus.
-    User: ${user.full_name}
-    Points: ${user.current_points}
+    You are EcoBot, the friendly AI assistant for the "EcoCampus" app.
     
-    Knowledge:
-    - Earn points by Daily Check-in, Events, and Uploading photos.
-    - Spend points in the Store.
-    
-    Keep answers short, friendly, and use emojis 🌿.
+    USER CONTEXT:
+    - Name: ${user.full_name}
+    - Current EcoPoints: ${user.current_points}
+    - Course: ${user.course || 'General'}
+
+    YOUR KNOWLEDGE BASE:
+    1. **App Goal:** Promote sustainability on campus through gamification.
+    2. **Earning Points:** - Daily Check-in (+10 pts).
+       - Participating in Events (RSVP in 'Events' tab).
+       - Uploading photos of eco-actions (in 'Action' tab).
+       - Daily Quiz.
+    3. **Spending Points:** Go to the 'Store' tab to redeem coupons.
+    4. **Leaderboard:** Shows top students and departments.
+
+    PERSONALITY:
+    - Be cheerful, encouraging, and concise.
+    - Use emojis 🌿♻️.
+    - Keep responses under 3 sentences.
     `;
 };
 
 const fetchAIResponse = async (userMessage) => {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('PASTE_YOUR')) {
-        return "⚠️ API Key is missing. Please paste it in chatbot.js line 8.";
+    if (!OPENAI_API_KEY || OPENAI_API_KEY.includes('PASTE_YOUR')) {
+        return "⚠️ API Key missing. Please add your OpenAI Key in chatbot.js.";
     }
 
     const payload = {
-        contents: [{
-            parts: [{
-                text: getSystemPrompt() + `\n\nUser: ${userMessage}\nEcoBot:`
-            }]
-        }]
+        model: "gpt-3.5-turbo", // or "gpt-4" if you have access and budget
+        messages: [
+            { role: "system", content: getSystemPrompt() },
+            { role: "user", content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 150
     };
 
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${OPENAI_API_KEY}`
+            },
             body: JSON.stringify(payload)
         });
 
         const data = await response.json();
         
         if (!response.ok) {
-            console.error("Google Error:", data);
-            return `❌ Google Error: ${data.error?.message || 'Unknown error'}`;
+            console.error("OpenAI API Error:", data);
+            // Handle common OpenAI errors
+            if (data.error?.code === 'insufficient_quota') return "⚠️ OpenAI Error: You have run out of credits (Check platform.openai.com billing).";
+            if (data.error?.code === 'invalid_api_key') return "⚠️ OpenAI Error: Invalid API Key.";
+            
+            return `❌ OpenAI Error: ${data.error?.message || 'Unknown error'}`;
         }
 
-        return data.candidates[0].content.parts[0].text;
+        return data.choices[0].message.content;
 
     } catch (error) {
-        return `❌ Network Error: ${error.message}`;
+        console.error("Network Error:", error);
+        return "I'm having trouble connecting to the green network. 🌱 Please check your internet connection.";
     }
 };
 
@@ -73,13 +95,18 @@ const chatInput = document.getElementById('chatbot-input');
 const modal = document.getElementById('chatbot-modal');
 const modalContent = document.getElementById('chatbot-modal-content');
 
+// Add a message to the chat window
 const appendMessage = (text, sender) => {
     const div = document.createElement('div');
     div.className = 'flex w-full mb-4 animate-fade-in';
     
     if (sender === 'user') {
-        div.innerHTML = `<div class="ml-auto bg-green-600 text-white p-3 rounded-2xl rounded-tr-none max-w-[80%] shadow-md"><p class="text-sm">${text}</p></div>`;
+        div.innerHTML = `
+            <div class="ml-auto bg-green-600 text-white p-3 rounded-2xl rounded-tr-none max-w-[80%] shadow-md">
+                <p class="text-sm">${text}</p>
+            </div>`;
     } else {
+        // Bot message
         div.innerHTML = `
             <div class="flex items-end">
                 <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-6 h-6 mr-2 mb-1 object-contain">
@@ -88,51 +115,79 @@ const appendMessage = (text, sender) => {
                 </div>
             </div>`;
     }
+    
     chatOutput.appendChild(div);
-    chatOutput.scrollTop = chatOutput.scrollHeight; 
+    chatOutput.scrollTop = chatOutput.scrollHeight; // Auto scroll to bottom
 };
 
+// Handle Form Submit
 if (chatForm) {
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const message = chatInput.value.trim();
         if (!message) return;
 
+        // 1. Show User Message
         appendMessage(message, 'user');
         chatInput.value = '';
         
+        // 2. Show Typing Indicator
         const typingId = 'typing-' + Date.now();
         const typingDiv = document.createElement('div');
         typingDiv.id = typingId;
         typingDiv.className = 'flex w-full mb-4';
-        typingDiv.innerHTML = `<div class="flex items-end"><div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none shadow-sm"><div class="flex space-x-1"><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75"></div><div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div></div></div></div>`;
+        typingDiv.innerHTML = `
+             <div class="flex items-end">
+                <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-6 h-6 mr-2 mb-1 object-contain">
+                <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none shadow-sm">
+                    <div class="flex space-x-1">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-75"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-150"></div>
+                    </div>
+                </div>
+            </div>`;
         chatOutput.appendChild(typingDiv);
         chatOutput.scrollTop = chatOutput.scrollHeight;
 
+        // 3. Fetch AI Response
         const botResponse = await fetchAIResponse(message);
 
+        // 4. Remove Typing & Show Response
         const typingEl = document.getElementById(typingId);
         if(typingEl) typingEl.remove();
         appendMessage(botResponse, 'bot');
     });
 }
 
+// ==========================================
+// 🚪 MODAL LOGIC
+// ==========================================
+
 window.openChatbotModal = () => {
     modal.classList.remove('invisible', 'opacity-0');
     modal.classList.add('open'); 
-    setTimeout(() => { modalContent.classList.remove('translate-y-full'); modalContent.classList.add('translate-y-0'); }, 10);
+    setTimeout(() => {
+        modalContent.classList.remove('translate-y-full');
+        modalContent.classList.add('translate-y-0');
+    }, 10);
 };
 
 window.closeChatbotModal = () => {
     modalContent.classList.remove('translate-y-0');
     modalContent.classList.add('translate-y-full');
-    setTimeout(() => { modal.classList.remove('open'); modal.classList.add('invisible', 'opacity-0'); }, 300);
+    setTimeout(() => {
+        modal.classList.remove('open');
+        modal.classList.add('invisible', 'opacity-0');
+    }, 300);
 };
 
+// Simple Markdown Parser
 const marked = {
     parse: (text) => {
         if(!text) return '';
         text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
         text = text.replace(/\n/g, '<br>');
         return text;
     }
