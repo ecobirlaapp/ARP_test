@@ -47,7 +47,8 @@ const fetchAIResponse = async (userMessage) => {
     }
 
     const payload = {
-        model: "llama3-8b-8192", // Free, fast, and smart model
+        // FIX: Updated to the latest supported model
+        model: "llama-3.3-70b-versatile", 
         messages: [
             { role: "system", content: getSystemPrompt() },
             { role: "user", content: userMessage }
