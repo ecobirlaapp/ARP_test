@@ -8,7 +8,8 @@ import { els } from './utils.js';
 // 2. Paste it inside the quotes below:
 const GEMINI_API_KEY = 'AIzaSyDnt02vXZKe0LXdMg9eXvqdxMGYdgNJCCU'; 
 
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+// FIX: Switched to 'gemini-pro' which is more stable for all key types
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
 // ==========================================
 // 🧠 AI LOGIC
@@ -30,20 +31,21 @@ const getSystemPrompt = () => {
     2. **Earning Points:** - Daily Check-in (+10 pts).
        - Participating in Events (RSVP in 'Events' tab).
        - Uploading photos of eco-actions (in 'Action' tab).
-       - Quizzes.
-    3. **Spending Points:** Go to the 'Store' tab to redeem coupons for canteen items or merchandise.
+       - Daily Quiz.
+    3. **Spending Points:** Go to the 'Store' tab to redeem coupons.
     4. **Leaderboard:** Shows top students and departments.
 
     PERSONALITY:
     - Be cheerful, encouraging, and concise.
     - Use emojis 🌿♻️.
-    - If asked about code/technical bugs, jokingly say you are just a leaf-loving bot.
-    - Keep responses under 3 sentences when possible.
+    - Keep responses under 3 sentences.
     `;
 };
 
 const fetchAIResponse = async (userMessage) => {
-    if (!GEMINI_API_KEY) return "⚠️ Please add your API Key in chatbot.js to enable me!";
+    if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 10) {
+        return "⚠️ API Key missing. Please add it in chatbot.js (Line 9).";
+    }
 
     const prompt = {
         contents: [{
@@ -63,15 +65,16 @@ const fetchAIResponse = async (userMessage) => {
         const data = await response.json();
         
         if (data.error) {
+            console.error("Gemini API Error:", data.error);
             throw new Error(data.error.message);
         }
 
-        // Extract text from Gemini response
+        // Extract text from Gemini response (Handle standard structure)
         return data.candidates[0].content.parts[0].text;
 
     } catch (error) {
-        console.error("AI Error:", error);
-        return "I'm having trouble connecting to the green network right now. 🌱 Please try again later.";
+        console.error("AI Connection Error:", error);
+        return "I'm having trouble connecting to the green network right now. 🌱 (Check Console for API Error)";
     }
 };
 
@@ -101,7 +104,7 @@ const appendMessage = (text, sender) => {
             <div class="flex items-end">
                 <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-6 h-6 mr-2 mb-1 object-contain">
                 <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none max-w-[80%] shadow-sm">
-                    <p class="text-sm text-gray-800 dark:text-gray-100">${marked.parse(text)}</p> <!-- markdown parsing -->
+                    <p class="text-sm text-gray-800 dark:text-gray-100">${marked.parse(text)}</p> 
                 </div>
             </div>`;
     }
@@ -144,18 +147,19 @@ if (chatForm) {
         const botResponse = await fetchAIResponse(message);
 
         // 4. Remove Typing & Show Response
-        document.getElementById(typingId).remove();
+        const typingEl = document.getElementById(typingId);
+        if(typingEl) typingEl.remove();
         appendMessage(botResponse, 'bot');
     });
 }
 
 // ==========================================
-// 🚪 MODAL LOGIC (Exposed to Window)
+// 🚪 MODAL LOGIC
 // ==========================================
 
 window.openChatbotModal = () => {
     modal.classList.remove('invisible', 'opacity-0');
-    modal.classList.add('open'); // Triggers CSS visibility
+    modal.classList.add('open'); 
     setTimeout(() => {
         modalContent.classList.remove('translate-y-full');
         modalContent.classList.add('translate-y-0');
@@ -171,14 +175,12 @@ window.closeChatbotModal = () => {
     }, 300);
 };
 
-// Simple Markdown Parser for Bold/Italic support
+// Simple Markdown Parser
 const marked = {
     parse: (text) => {
-        // Bold
+        if(!text) return '';
         text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        // Italic
         text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        // Newlines
         text = text.replace(/\n/g, '<br>');
         return text;
     }
