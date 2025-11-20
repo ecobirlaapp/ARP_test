@@ -4,11 +4,11 @@ import { els } from './utils.js';
 // ==========================================
 // ⚙️ CONFIGURATION
 // ==========================================
-// PASTE YOUR KEY HERE
+// PASTE YOUR NEW KEY HERE (The one ending in ...yaU or ...JCCU)
 const GEMINI_API_KEY = 'AIzaSyCJKZPm8hQafgfEoFRN4_P04gkcdBv_yaU'; 
 
-// Using the standard Pro model which is most reliable
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+// FIX: Changed model from 'gemini-pro' to 'gemini-1.5-flash' (The new standard)
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 // ==========================================
 // 🧠 AI LOGIC
@@ -16,12 +16,22 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 const getSystemPrompt = () => {
     const user = state.currentUser || { full_name: 'Student', current_points: 0 };
-    return `You are EcoBot. User: ${user.full_name}. Points: ${user.current_points}. Keep answers short.`;
+    return `
+    You are EcoBot, the AI assistant for EcoCampus.
+    User: ${user.full_name}
+    Points: ${user.current_points}
+    
+    Knowledge:
+    - Earn points by Daily Check-in, Events, and Uploading photos.
+    - Spend points in the Store.
+    
+    Keep answers short, friendly, and use emojis 🌿.
+    `;
 };
 
 const fetchAIResponse = async (userMessage) => {
     if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('PASTE_YOUR')) {
-        return "⚠️ API Key is missing in chatbot.js";
+        return "⚠️ API Key is missing. Please paste it in chatbot.js line 8.";
     }
 
     const payload = {
@@ -41,11 +51,9 @@ const fetchAIResponse = async (userMessage) => {
 
         const data = await response.json();
         
-        // 🚨 DEBUGGING: Show the EXACT error from Google in the chat 🚨
         if (!response.ok) {
             console.error("Google Error:", data);
-            const errorMsg = data.error?.message || response.statusText;
-            return `❌ Google Error: ${errorMsg}`;
+            return `❌ Google Error: ${data.error?.message || 'Unknown error'}`;
         }
 
         return data.candidates[0].content.parts[0].text;
