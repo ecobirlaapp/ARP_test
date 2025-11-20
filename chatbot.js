@@ -4,11 +4,10 @@ import { els } from './utils.js';
 // ==========================================
 // ⚙️ CONFIGURATION
 // ==========================================
-// 1. Get a free key here: https://aistudio.google.com/app/apikey
-// 2. Paste it inside the quotes below:
+// PASTE YOUR NEW KEY BELOW (Inside the quotes)
 const GEMINI_API_KEY = 'AIzaSyDnt02vXZKe0LXdMg9eXvqdxMGYdgNJCCU'; 
 
-// List of models to try in order (Fallback mechanism)
+// List of models to try in order (Auto-fallback if one fails)
 const MODELS = [
     'gemini-1.5-flash',
     'gemini-pro',
@@ -49,8 +48,9 @@ const getSystemPrompt = () => {
 };
 
 const fetchAIResponse = async (userMessage) => {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY.length < 10) {
-        return "⚠️ API Key missing. Please add it in chatbot.js (Line 9).";
+    // Safety check for empty or placeholder keys
+    if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('PASTE_YOUR')) {
+        return "⚠️ API Key is missing. Please copy the key from Google AI Studio and paste it into chatbot.js (Line 9).";
     }
 
     const payload = {
@@ -61,12 +61,12 @@ const fetchAIResponse = async (userMessage) => {
         }]
     };
 
-    // Try models one by one
+    // Try models one by one until one works
     for (const model of MODELS) {
         const url = `${BASE_URL}${model}:generateContent?key=${GEMINI_API_KEY}`;
         
         try {
-            console.log(`Attempting with model: ${model}...`);
+            // console.log(`Attempting with model: ${model}...`); // Debugging line
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -74,9 +74,8 @@ const fetchAIResponse = async (userMessage) => {
             });
 
             if (!response.ok) {
-                const errData = await response.json();
-                console.warn(`Model ${model} failed:`, errData.error?.message || response.statusText);
-                continue; // Try next model
+                // If this model fails (e.g., 404), just try the next one
+                continue; 
             }
 
             const data = await response.json();
@@ -85,12 +84,11 @@ const fetchAIResponse = async (userMessage) => {
             return data.candidates[0].content.parts[0].text;
 
         } catch (error) {
-            console.warn(`Network error with ${model}:`, error);
-            // Continue to next model
+            // Network error, try next model
         }
     }
 
-    return "I'm having trouble connecting to the green network. 🌱 (All AI models failed. Check your API Key limits or internet connection.)";
+    return "I'm having trouble connecting to the green network. 🌱 (Please check your internet connection.)";
 };
 
 // ==========================================
