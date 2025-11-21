@@ -1,6 +1,6 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getIconForChallenge, uploadToCloudinary } from './utils.js';
+import { els, getIconForChallenge, uploadToCloudinary, getTodayIST } from './utils.js';
 
 // 1. Load Challenges
 export const loadChallengesData = async () => {
@@ -30,14 +30,15 @@ export const loadChallengesData = async () => {
     } catch (err) { console.error('Challenges Load Error:', err); }
 };
 
-// 2. Check Quiz Status Logic (NEW)
+// 2. Check Quiz Status Logic
 const checkQuizStatus = async () => {
     const quizSection = document.getElementById('daily-quiz-section');
     const btn = document.getElementById('btn-quiz-play');
     if (!quizSection || !btn) return;
 
     try {
-        const today = new Date().toISOString().split('T')[0];
+        // FIXED: Use Indian Date instead of UTC to find today's quiz
+        const today = getTodayIST();
         
         // 1. Get Today's Quiz ID
         const { data: quiz, error: quizError } = await supabase
@@ -48,7 +49,7 @@ const checkQuizStatus = async () => {
             .single();
 
         if (quizError || !quiz) {
-            // No quiz today, maybe hide the section
+            // No quiz today, hide the section
             quizSection.classList.add('hidden');
             return;
         }
@@ -206,7 +207,9 @@ export const openEcoQuizModal = async () => {
     played.classList.add('hidden');
 
     try {
-        const today = new Date().toISOString().split('T')[0];
+        // FIXED: Use Indian Date instead of UTC
+        const today = getTodayIST();
+        
         // Fetch quiz
         const { data: quiz, error } = await supabase
             .from('daily_quizzes')
