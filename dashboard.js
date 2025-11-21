@@ -1,12 +1,14 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary } from './utils.js';
+import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST } from './utils.js';
 import { refreshUserData } from './app.js';
 
 export const loadDashboardData = async () => {
     try {
         const userId = state.currentUser.id;
-        const today = new Date().toISOString().split('T')[0];
+        
+        // FIXED: Use Indian Date instead of UTC to fix streak resets
+        const today = getTodayIST(); 
 
         const [
             { data: checkinData },
@@ -113,7 +115,6 @@ export const handleDailyCheckin = async () => {
     checkinButton.textContent = 'Checking in...';
 
     // 1. Calculate Optimistic Values
-    // We calculate this NOW before any fetches happen
     const optimisticStreak = (state.currentUser.checkInStreak || 0) + 1;
 
     try {
@@ -131,7 +132,6 @@ export const handleDailyCheckin = async () => {
         await refreshUserData(); 
 
         // 5. RESTORE OPTIMISTIC STATE
-        // Since refreshUserData() replaced the user object, we must put the streak back manually
         state.currentUser.checkInStreak = optimisticStreak;
         state.currentUser.isCheckedInToday = true;
 
