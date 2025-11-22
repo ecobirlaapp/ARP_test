@@ -310,8 +310,9 @@
         <header class="relative z-10 h-[72px] flex items-center justify-between px-6 bg-white/60 dark:bg-[#143723]/50 backdrop-blur-xl border-b border-[#c8ffe1]/75 dark:border-black/40 shadow-sm">
             <div class="flex items-center gap-3">
                 <div class="relative">
-                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl shadow-[0_6px_18px_rgba(0,128,60,0.35)] bg-[radial-gradient(circle_at_30%_30%,#8eef9c,#169653)]">
-                        <i data-lucide="leaf" class="w-6 h-6"></i>
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center bg-white shadow-[0_6px_18px_rgba(0,128,60,0.35)] overflow-hidden border-2 border-white">
+                        <!-- EARTH LOGO HERE -->
+                        <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-full h-full object-contain">
                     </div>
                     <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#34c46e] dark:bg-[#3af89b] border-2 border-[#e6f7ed] dark:border-[#07180f]"></div>
                 </div>
@@ -321,11 +322,11 @@
                 </div>
             </div>
             
+            <!-- Close Button -->
             <button onclick="closeChatbotModal()" class="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 hover:bg-red-100 text-[#163626] dark:text-[#dff7e8] hover:text-red-500 transition-colors">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </header>
-
         <div id="chatbot-messages" class="relative z-10 flex-grow overflow-y-auto p-6 pb-32 space-y-6 scroll-smooth">
             </div>
 
