@@ -211,7 +211,9 @@
                     <div class="flex justify-center mb-6"><div class="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center"><i data-lucide="ticket" class="w-10 h-10 text-emerald-600 dark:text-emerald-400"></i></div></div>
                     <p class="text-center text-gray-600 dark:text-gray-300 mb-6">Got a special code from an event or challenge? Enter it below to claim your bonus EcoPoints!</p>
                     <form id="redeem-code-form" class="space-y-6">
-                        <div><label for="redeem-input" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">10-Digit Code</label><input id="redeem-input" name="redeem-input" type="text" required class="w-full border-2 border-gray-300 dark:border-gray-600 px-4 py-3 rounded-xl text-center text-2xl tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-700 dark:text-white placeholder-gray-300 dark:placeholder-gray-500" placeholder="XXXXXXXXXX"></div>
+                        <div><label for="redeem-input" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">10-Digit Code</label>
+                            <input id="redeem-input" name="redeem-input" type="text" required class="w-full border-2 border-gray-300 dark:border-gray-600 px-4 py-3 rounded-xl text-center text-xl font-bold uppercase focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-700 dark:text-white placeholder-gray-300 dark:placeholder-gray-500" placeholder="ENTER CODE HERE">
+                        </div>
                         <div id="redeem-message" class="text-sm text-center h-5"></div>
                         <button type="submit" id="redeem-submit-btn" class="w-full btn-eco-gradient text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:opacity-90 transform transition-transform active:scale-95">Redeem Points</button>
                     </form>
@@ -294,11 +296,39 @@
     <div id="qr-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closeQrModal()"></div>
     <div id="qr-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
     
-    <div id="chatbot-modal" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end justify-center opacity-0 invisible" onclick="closeChatbotModal()">
-        <div id="chatbot-modal-content" class="bg-white dark:bg-gray-800 rounded-t-2xl w-full max-w-md h-[70vh] flex flex-col transform translate-y-full" onclick="event.stopPropagation()">
-            <div class="flex-shrink-0 flex justify-between items-center p-4 border-b dark:border-gray-700"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center"><img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="Bot" class="w-8 h-8 mr-2 object-contain">EcoBuddy</h3><button onclick="closeChatbotModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><i data-lucide="x" class="w-6 h-6"></i></button></div>
-            <div id="chatbot-messages" class="flex-grow p-4 space-y-4 overflow-y-auto"><div class="flex"><div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg rounded-bl-none max-w-xs"><p class="text-sm text-gray-800 dark:text-gray-100">Hi! I'm EcoBuddy. How can I help you with your sustainability questions today?</p></div></div></div>
-            <div class="flex-shrink-0 p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800"><form id="chatbot-form" class="flex items-center space-x-2"><input id="chatbot-input" type="text" placeholder="Ask about recycling..." class="w-full border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-full focus:outline-none focus:ring-green-500 focus:border-green-500 bg-white dark:bg-gray-700 dark:text-white"><button type="submit" class="bg-green-600 text-white p-2.5 rounded-full"><i data-lucide="send" class="w-5 h-5"></i></button></form></div>
+    <div id="chatbot-modal" class="fixed inset-0 z-[60] flex items-end justify-center transition-all duration-500 translate-y-full invisible">
+        
+        <div id="chatbot-modal-content" class="w-full h-full bg-gradient-to-br from-emerald-50/90 via-teal-50/90 to-blue-50/90 backdrop-blur-xl flex flex-col shadow-2xl relative">
+            
+            <div class="absolute top-0 left-0 w-64 h-64 bg-green-400/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+            <div class="absolute bottom-0 right-0 w-64 h-64 bg-blue-400/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
+
+            <div class="flex-shrink-0 flex justify-between items-center p-5 border-b border-white/40 bg-white/40 backdrop-blur-md relative z-10 pt-12">
+                <h3 class="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center border border-green-100">
+                        <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="Bot" class="w-8 h-8 object-contain">
+                    </div>
+                    <div>
+                        <span class="block text-lg leading-none text-emerald-900 dark:text-emerald-100">EcoBuddy</span>
+                        <span class="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">Online & Ready to help</span>
+                    </div>
+                </h3>
+                <button onclick="closeChatbotModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-white/50 hover:bg-red-100 text-gray-500 hover:text-red-500 transition-colors shadow-sm">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <div id="chatbot-messages" class="flex-grow p-5 space-y-4 overflow-y-auto relative z-10 scroll-smooth pb-20">
+                </div>
+
+            <div class="flex-shrink-0 p-4 bg-white/60 backdrop-blur-md border-t border-white/50 relative z-10 pb-8">
+                <form id="chatbot-form" class="flex items-center gap-3 bg-white rounded-full px-2 py-2 shadow-lg border border-gray-100 focus-within:ring-2 focus-within:ring-green-400 transition-all">
+                    <input id="chatbot-input" type="text" placeholder="Ask about recycling, events..." class="flex-grow bg-transparent border-none focus:ring-0 px-4 text-gray-700 placeholder-gray-400 font-medium" autocomplete="off">
+                    <button type="submit" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white p-3 rounded-full hover:scale-105 active:scale-95 transition-transform shadow-md">
+                        <i data-lucide="send" class="w-5 h-5 ml-0.5"></i>
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 
