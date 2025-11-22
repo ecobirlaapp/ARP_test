@@ -5,10 +5,9 @@ import { els } from './utils.js';
 // ==========================================
 // ⚙️ CONFIGURATION
 // ==========================================
-// PASTE YOUR GROQ KEY HERE
-const GROQ_API_KEY = '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'; 
-
-const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// Update this if Supabase gives you a different URL
+const EDGE_FUNCTION_URL = 'https://aggqmjxhnsbmsymwblqg.supabase.co/functions/v1/chat-ai'; 
+// ^ REPLACE THIS with your actual Edge Function URL from Supabase Dashboard
 
 // ==========================================
 // 🧠 AI LOGIC (EcoBuddy's Brain)
@@ -53,29 +52,31 @@ const getSystemPrompt = () => {
 };
 
 const fetchAIResponse = async (userMessage) => {
-    if (!GROQ_API_KEY || GROQ_API_KEY.includes('PASTE_YOUR')) return "⚠️ Key Missing! Tell Mohit to fix chatbot.js line 9.";
-
-    const payload = {
-        model: "llama-3.3-70b-versatile", 
-        messages: [
-            { role: "system", content: getSystemPrompt() },
-            { role: "user", content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 600
-    };
-
     try {
-        const response = await fetch(API_URL, {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        // Call Supabase Edge Function
+        const response = await fetch(EDGE_FUNCTION_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-            body: JSON.stringify(payload)
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token || ''}` // Optional: Pass auth token if you enable RLS on functions
+            },
+            body: JSON.stringify({ 
+                message: userMessage,
+                systemPrompt: getSystemPrompt() 
+            })
         });
+
         const data = await response.json();
-        if (!response.ok) return `❌ Error: ${data.error?.message}`;
-        return data.choices[0].message.content;
+        
+        if (!response.ok) throw new Error(data.error || "Server Error");
+        return data.reply;
+
     } catch (error) {
-        return "🔌 Net issue! Check connection.";
+        console.error("AI Fetch Error:", error);
+        return "🔌 My brain is offline (Server Error). Try again later!";
     }
 };
 
@@ -100,7 +101,6 @@ const loadChatHistory = async () => {
     if (!state.currentUser) return;
     
     const chatOutput = document.getElementById('chatbot-messages');
-    // Clear previous loading state but keep the "encrypted" notice
     chatOutput.innerHTML = `<div class="text-center py-6"><p class="text-xs text-gray-400 dark:text-gray-600">Messages are secured with end-to-end encryption.</p></div>`;
 
     try {
@@ -108,35 +108,19 @@ const loadChatHistory = async () => {
             .from('chat_history')
             .select('*')
             .eq('user_id', state.currentUser.id)
-            .order('created_at', { ascending: false }) // Get latest first
-            .limit(20); // Only load last 20 messages
+            .order('created_at', { ascending: false }) 
+            .limit(20); 
 
         if (error) throw error;
 
         if (data && data.length > 0) {
-            // Reverse to show oldest to newest
-            data.reverse().forEach(msg => appendMessageUI(msg.message, msg.role, false)); // false = no animation for history
+            data.reverse().forEach(msg => appendMessageUI(msg.message, msg.role, false)); 
             setTimeout(() => chatOutput.scrollTop = chatOutput.scrollHeight, 100);
         } else {
-            // If no history, show welcome message
             appendMessageUI(`Hi ${state.currentUser.full_name}! I'm EcoBuddy. Ask me anything about BKBNC or saving the planet! 🌱`, 'bot');
         }
     } catch (err) {
         console.error("Load History Error:", err);
-    }
-};
-
-// ==========================================
-// 📝 MARKDOWN PARSER
-// ==========================================
-const marked = {
-    parse: (text) => {
-        if(!text) return '';
-        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
-        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
-        text = text.replace(/^- (.*$)/gim, '<li>$1</li>'); // List items
-        text = text.replace(/\n/g, '<br>'); // Newlines
-        return text;
     }
 };
 
@@ -147,9 +131,8 @@ const marked = {
 const chatOutput = document.getElementById('chatbot-messages');
 const chatForm = document.getElementById('chatbot-form');
 const chatInput = document.getElementById('chatbot-input');
-const modal = document.getElementById('chatbot-modal');
 
-// Separated UI logic from Data logic
+// SEPARATED UI LOGIC
 const appendMessageUI = (text, sender, animate = true) => {
     const div = document.createElement('div');
     div.className = `msg-group w-full flex ${sender === 'user' ? 'justify-end' : 'justify-start'} ${animate ? 'animate-slideUp' : ''}`;
@@ -157,22 +140,29 @@ const appendMessageUI = (text, sender, animate = true) => {
     const parsedText = marked.parse(text);
 
     if (sender === 'user') {
-        // User Bubble Style
+        // User Bubble
         div.innerHTML = `
             <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-br-lg text-white shadow-md bg-gradient-to-br from-[#34c46e] to-[#169653]">
                 <div class="text-sm leading-relaxed">${parsedText}</div>
             </div>`;
     } else {
-        // AI Bubble Style
+        // Bot Bubble WITH EARTH LOGO
         div.innerHTML = `
-            <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 text-[#2c4434] dark:text-[#e7ffef]">
-                <div class="text-sm leading-relaxed">${parsedText}</div>
+            <div class="flex items-end gap-2 max-w-[90%]">
+                <div class="w-8 h-8 rounded-full bg-white p-0.5 shadow-sm flex-shrink-0 border border-[#c8ffe1]">
+                    <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-full h-full object-contain rounded-full">
+                </div>
+                <div class="p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 text-[#2c4434] dark:text-[#e7ffef]">
+                    <div class="text-sm leading-relaxed">${parsedText}</div>
+                </div>
             </div>`;
     }
     
     const chatOutput = document.getElementById('chatbot-messages');
-    chatOutput.appendChild(div);
-    chatOutput.scrollTop = chatOutput.scrollHeight; 
+    if (chatOutput) {
+        chatOutput.appendChild(div);
+        chatOutput.scrollTop = chatOutput.scrollHeight; 
+    }
 };
 
 if (chatForm) {
@@ -194,14 +184,19 @@ if (chatForm) {
         typingDiv.id = typingId;
         typingDiv.className = 'msg-group w-full flex justify-start animate-slideUp';
         typingDiv.innerHTML = `
-            <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 flex items-center gap-1 h-[54px]">
-                 <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+            <div class="flex items-end gap-2 max-w-[90%]">
+                <div class="w-8 h-8 rounded-full bg-white p-0.5 shadow-sm flex-shrink-0 border border-[#c8ffe1]">
+                    <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-full h-full object-contain rounded-full">
+                </div>
+                <div class="p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 flex items-center gap-1 h-[54px]">
+                     <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                </div>
             </div>`;
         
         chatOutput.appendChild(typingDiv);
         chatOutput.scrollTop = chatOutput.scrollHeight;
 
-        // 4. API: Fetch Response
+        // 4. API: Fetch Response (Via Edge Function)
         const botResponse = await fetchAIResponse(message);
 
         // 5. UI: Remove Typing & Show Response
@@ -215,32 +210,36 @@ if (chatForm) {
 }
 
 // ==========================================
-// 🚪 MODAL LOGIC (Full Screen Transition)
+// 🚪 MODAL LOGIC
 // ==========================================
 
 window.openChatbotModal = () => {
     const modal = document.getElementById('chatbot-modal');
-    
-    // 1. Make it visible (but still off-screen)
     modal.classList.remove('invisible'); 
-    
-    // 2. Animate it up (Slide in)
     requestAnimationFrame(() => {
         modal.classList.remove('translate-y-full');
     });
-    
-    // 3. Load History
     loadChatHistory();
 };
 
 window.closeChatbotModal = () => {
     const modal = document.getElementById('chatbot-modal');
-    
-    // 1. Slide it down
     modal.classList.add('translate-y-full');
-    
-    // 2. Wait for animation to finish, then hide functionality
     setTimeout(() => {
         modal.classList.add('invisible');
-    }, 500); // Matches the duration-500 class in HTML
+    }, 500);
+};
+
+// ==========================================
+// 📝 MARKDOWN PARSER
+// ==========================================
+const marked = {
+    parse: (text) => {
+        if(!text) return '';
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); 
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>'); 
+        text = text.replace(/^- (.*$)/gim, '<li>$1</li>'); 
+        text = text.replace(/\n/g, '<br>'); 
+        return text;
+    }
 };
