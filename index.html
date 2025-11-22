@@ -7,7 +7,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css"> 
     <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -18,6 +18,7 @@
                 extend: {
                     fontFamily: {
                         inter: ['Inter', 'sans-serif'],
+                        jakarta: ['Plus Jakarta Sans', 'sans-serif'],
                     },
                     colors: {
                         brand: { 
@@ -28,13 +29,17 @@
                             700: '#4338ca',
                             900: '#312e81'
                         }
+                    },
+                    animation: {
+                        'float': 'float 18s infinite ease-in-out',
+                        'slideUp': 'slideUp 0.35s ease forwards',
                     }
                 },
             },
         }
     </script>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900">
+<body class="bg-gray-50 dark:bg-gray-900 font-inter">
     <input type="file" id="profile-upload-input" accept="image/*" class="hidden">
 
     <div id="app-loading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white dark:bg-gray-900">
@@ -86,7 +91,6 @@
         </header>
 
         <main class="main-content bg-gray-50 dark:bg-gray-900 flex-grow overflow-y-auto pb-24">
-            
             <div id="dashboard" class="page active p-6">
                  <div class="mb-8"><h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Hi, <span id="user-name-greeting">...</span>!</h2><p class="text-lg text-gray-600 dark:text-gray-400">Let's make our campus greener today.</p></div>
                  
@@ -296,39 +300,46 @@
     <div id="qr-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closeQrModal()"></div>
     <div id="qr-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
     
-    <div id="chatbot-modal" class="fixed inset-0 z-[60] flex items-end justify-center transition-all duration-500 translate-y-full invisible">
+    <div id="chatbot-modal" class="fixed inset-0 z-[60] bg-[#e6f7ed] dark:bg-[#07180f] transition-transform duration-500 translate-y-full invisible flex flex-col h-full w-full font-jakarta">
         
-        <div id="chatbot-modal-content" class="w-full h-full bg-gradient-to-br from-emerald-50/90 via-teal-50/90 to-blue-50/90 backdrop-blur-xl flex flex-col shadow-2xl relative">
-            
-            <div class="absolute top-0 left-0 w-64 h-64 bg-green-400/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-            <div class="absolute bottom-0 right-0 w-64 h-64 bg-blue-400/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
+        <div class="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            <div class="absolute top-[-60px] left-[-50px] w-[350px] h-[350px] rounded-full bg-[#c4f7d2] dark:bg-[#0e3e2a] blur-[90px] opacity-60 animate-float"></div>
+            <div class="absolute bottom-[-80px] right-[-60px] w-[450px] h-[450px] rounded-full bg-[#dafee9] dark:bg-[#0f5137] blur-[90px] opacity-60 animate-float delay-[-5s]"></div>
+        </div>
 
-            <div class="flex-shrink-0 flex justify-between items-center p-5 border-b border-white/40 bg-white/40 backdrop-blur-md relative z-10 pt-12">
-                <h3 class="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center border border-green-100">
-                        <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="Bot" class="w-8 h-8 object-contain">
+        <header class="relative z-10 h-[72px] flex items-center justify-between px-6 bg-white/60 dark:bg-[#143723]/50 backdrop-blur-xl border-b border-[#c8ffe1]/75 dark:border-black/40 shadow-sm">
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl shadow-[0_6px_18px_rgba(0,128,60,0.35)] bg-[radial-gradient(circle_at_30%_30%,#8eef9c,#169653)]">
+                        <i data-lucide="leaf" class="w-6 h-6"></i>
                     </div>
-                    <div>
-                        <span class="block text-lg leading-none text-emerald-900 dark:text-emerald-100">EcoBuddy</span>
-                        <span class="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">Online & Ready to help</span>
-                    </div>
-                </h3>
-                <button onclick="closeChatbotModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-white/50 hover:bg-red-100 text-gray-500 hover:text-red-500 transition-colors shadow-sm">
-                    <i data-lucide="x" class="w-6 h-6"></i>
-                </button>
-            </div>
-
-            <div id="chatbot-messages" class="flex-grow p-5 space-y-4 overflow-y-auto relative z-10 scroll-smooth pb-20">
+                    <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#34c46e] dark:bg-[#3af89b] border-2 border-[#e6f7ed] dark:border-[#07180f]"></div>
                 </div>
-
-            <div class="flex-shrink-0 p-4 bg-white/60 backdrop-blur-md border-t border-white/50 relative z-10 pb-8">
-                <form id="chatbot-form" class="flex items-center gap-3 bg-white rounded-full px-2 py-2 shadow-lg border border-gray-100 focus-within:ring-2 focus-within:ring-green-400 transition-all">
-                    <input id="chatbot-input" type="text" placeholder="Ask about recycling, events..." class="flex-grow bg-transparent border-none focus:ring-0 px-4 text-gray-700 placeholder-gray-400 font-medium" autocomplete="off">
-                    <button type="submit" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white p-3 rounded-full hover:scale-105 active:scale-95 transition-transform shadow-md">
-                        <i data-lucide="send" class="w-5 h-5 ml-0.5"></i>
-                    </button>
-                </form>
+                <div>
+                    <h2 class="text-lg font-bold text-[#163626] dark:text-[#dff7e8]">EcoBuddy</h2>
+                    <p class="text-xs text-[#6f8c79] dark:text-[#97c7a9]">Always Online</p>
+                </div>
             </div>
+            
+            <button onclick="closeChatbotModal()" class="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 hover:bg-red-100 text-[#163626] dark:text-[#dff7e8] hover:text-red-500 transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </header>
+
+        <div id="chatbot-messages" class="relative z-10 flex-grow overflow-y-auto p-6 pb-32 space-y-6 scroll-smooth">
+            </div>
+
+        <div class="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-[#e6f7ed] dark:from-[#07180f] to-transparent z-20">
+            <div class="text-center text-xs font-medium text-[#6f8c79] dark:text-[#97c7a9] opacity-85 mb-3">
+                EcoBuddy can make mistakes, so double-check it.
+            </div>
+            
+            <form id="chatbot-form" class="flex items-center p-2 pl-5 bg-white/60 dark:bg-[#143723]/50 backdrop-blur-xl border border-[#c8ffe1]/75 dark:border-black/40 rounded-full shadow-lg">
+                <input id="chatbot-input" type="text" placeholder="Ask something eco-friendly..." class="flex-1 bg-transparent border-none outline-none text-[#163626] dark:text-[#dff7e8] placeholder-[#6f8c79] dark:placeholder-[#97c7a9] text-base" autocomplete="off">
+                <button type="submit" class="w-[46px] h-[46px] rounded-full flex items-center justify-center text-white text-lg shadow-md bg-gradient-to-br from-[#34c46e] to-[#169653] hover:scale-105 active:scale-95 transition-transform">
+                    <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                </button>
+            </form>
         </div>
     </div>
 
