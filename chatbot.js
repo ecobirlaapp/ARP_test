@@ -127,6 +127,20 @@ const loadChatHistory = async () => {
 };
 
 // ==========================================
+// 📝 MARKDOWN PARSER
+// ==========================================
+const marked = {
+    parse: (text) => {
+        if(!text) return '';
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
+        text = text.replace(/^- (.*$)/gim, '<li>$1</li>'); // List items
+        text = text.replace(/\n/g, '<br>'); // Newlines
+        return text;
+    }
+};
+
+// ==========================================
 // 🎨 UI HANDLERS
 // ==========================================
 
@@ -138,25 +152,25 @@ const modal = document.getElementById('chatbot-modal');
 // Separated UI logic from Data logic
 const appendMessageUI = (text, sender, animate = true) => {
     const div = document.createElement('div');
-    div.className = `flex w-full mb-4 ${animate ? 'animate-message' : ''}`;
+    div.className = `msg-group w-full flex ${sender === 'user' ? 'justify-end' : 'justify-start'} ${animate ? 'animate-slideUp' : ''}`;
     
     const parsedText = marked.parse(text);
 
     if (sender === 'user') {
+        // User Bubble Style
         div.innerHTML = `
-            <div class="msg-bubble msg-user">
-                <div class="msg-content text-sm">${parsedText}</div>
+            <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-br-lg text-white shadow-md bg-gradient-to-br from-[#34c46e] to-[#169653]">
+                <div class="text-sm leading-relaxed">${parsedText}</div>
             </div>`;
     } else {
+        // AI Bubble Style
         div.innerHTML = `
-            <div class="flex items-end w-full">
-                <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-8 h-8 mr-2 mb-1 object-contain rounded-full border border-gray-200 bg-white p-0.5 flex-shrink-0">
-                <div class="msg-bubble msg-bot">
-                    <div class="msg-content text-sm">${parsedText}</div>
-                </div>
+            <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 text-[#2c4434] dark:text-[#e7ffef]">
+                <div class="text-sm leading-relaxed">${parsedText}</div>
             </div>`;
     }
     
+    const chatOutput = document.getElementById('chatbot-messages');
     chatOutput.appendChild(div);
     chatOutput.scrollTop = chatOutput.scrollHeight; 
 };
@@ -178,14 +192,12 @@ if (chatForm) {
         const typingId = 'typing-' + Date.now();
         const typingDiv = document.createElement('div');
         typingDiv.id = typingId;
-        typingDiv.className = 'flex w-full mb-4 animate-message';
+        typingDiv.className = 'msg-group w-full flex justify-start animate-slideUp';
         typingDiv.innerHTML = `
-             <div class="flex items-end">
-                <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-8 h-8 mr-2 mb-1 object-contain rounded-full bg-white p-0.5 border border-gray-200">
-                <div class="msg-bubble msg-bot flex items-center gap-1 h-10">
-                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
-                </div>
+            <div class="max-w-[85%] p-4 px-5 rounded-[20px] rounded-bl-lg border border-[#c8ffe1]/75 dark:border-white/10 bg-white/85 dark:bg-[#1e3c2d]/70 flex items-center gap-1 h-[54px]">
+                 <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
             </div>`;
+        
         chatOutput.appendChild(typingDiv);
         chatOutput.scrollTop = chatOutput.scrollHeight;
 
@@ -231,18 +243,4 @@ window.closeChatbotModal = () => {
     setTimeout(() => {
         modal.classList.add('invisible');
     }, 500); // Matches the duration-500 class in HTML
-};
-
-// ==========================================
-// 📝 MARKDOWN PARSER
-// ==========================================
-const marked = {
-    parse: (text) => {
-        if(!text) return '';
-        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
-        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
-        text = text.replace(/^- (.*$)/gim, '<li>$1</li>'); // List items
-        text = text.replace(/\n/g, '<br>'); // Newlines
-        return text;
-    }
 };
