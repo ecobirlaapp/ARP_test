@@ -1,25 +1,30 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logActivity, cacheGet, cacheSet } from './utils.js';
+import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, cacheGet, cacheSet, logActivity } from './utils.js';
 import { refreshUserData } from './app.js';
 
 export const loadDashboardData = async () => {
     try {
         const userId = state.currentUser.id;
+        // IST Date for consistent check-in logic
         const today = getTodayIST(); 
-        const CACHE_KEY = `dashboard_${userId}_${today}`;
 
-        // A. Fast Load: Cache
-        const cachedDash = await cacheGet(CACHE_KEY);
-        if (cachedDash) {
-            state.currentUser.isCheckedInToday = cachedDash.isCheckedInToday;
-            state.currentUser.checkInStreak = cachedDash.checkInStreak;
-            state.currentUser.impact = cachedDash.impact;
-            renderDashboardUI(); // Render immediately with cached data
-            renderCheckinButtonState();
-        }
+        // 1. Try Load from Cache
+        const [cachedCheckin, cachedStreak, cachedImpact] = await Promise.all([
+            cacheGet(`checkin_${userId}_${today}`),
+            cacheGet(`streak_${userId}`),
+            cacheGet(`impact_${userId}`)
+        ]);
 
-        // B. Network Load: Fresh Data
+        // Apply Cached Data if available
+        if (cachedCheckin !== null) state.currentUser.isCheckedInToday = cachedCheckin;
+        if (cachedStreak !== null) state.currentUser.checkInStreak = cachedStreak;
+        if (cachedImpact) state.currentUser.impact = cachedImpact;
+
+        // Render immediately with cached data
+        if (cachedStreak !== null || cachedImpact) renderDashboard();
+
+        // 2. Fetch Fresh Data from Network
         const [
             { data: checkinData },
             { data: streakData },
@@ -30,19 +35,19 @@ export const loadDashboardData = async () => {
             supabase.from('user_impact').select('*').eq('user_id', userId).single()
         ]);
         
-        // Update State
+        // Update State with Fresh Data
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
 
         // Update Cache
-        await cacheSet(CACHE_KEY, {
-            isCheckedInToday: state.currentUser.isCheckedInToday,
-            checkInStreak: state.currentUser.checkInStreak,
-            impact: state.currentUser.impact
-        });
+        await Promise.all([
+            cacheSet(`checkin_${userId}_${today}`, state.currentUser.isCheckedInToday),
+            cacheSet(`streak_${userId}`, state.currentUser.checkInStreak),
+            cacheSet(`impact_${userId}`, state.currentUser.impact)
+        ]);
         
-        // Re-render with fresh data
+        // Re-render to show latest data
         renderDashboard();
 
     } catch (err) {
@@ -54,16 +59,6 @@ export const renderDashboard = () => {
     if (!state.currentUser) return; 
     renderDashboardUI();
     renderCheckinButtonState();
-    
-    // Log view only if dashboard is actually active
-    if (document.getElementById('dashboard').classList.contains('active')) {
-        // Debounce logging slightly to avoid spam
-        if (!window._dashLogged) {
-            logActivity('page_view', 'dashboard', 'Viewed Dashboard');
-            window._dashLogged = true;
-            setTimeout(() => window._dashLogged = false, 5000);
-        }
-    }
 };
 
 const renderDashboardUI = () => {
@@ -71,27 +66,15 @@ const renderDashboardUI = () => {
     els.userPointsHeader.textContent = user.current_points;
     els.userNameGreeting.textContent = user.full_name;
     
-    const sidebarName = document.getElementById('user-name-sidebar');
-    if(sidebarName) sidebarName.innerHTML = `${user.full_name} ${getTickImg(user.tick_type)}`;
-    
-    const sidebarPoints = document.getElementById('user-points-sidebar');
-    if(sidebarPoints) sidebarPoints.textContent = user.current_points;
-
+    document.getElementById('user-name-sidebar').innerHTML = `${user.full_name} ${getTickImg(user.tick_type)}`;
+    document.getElementById('user-points-sidebar').textContent = user.current_points;
     const level = getUserLevel(user.lifetime_points);
-    const sidebarLevel = document.getElementById('user-level-sidebar');
-    if(sidebarLevel) sidebarLevel.textContent = level.title;
+    document.getElementById('user-level-sidebar').textContent = level.title;
+    document.getElementById('user-avatar-sidebar').src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
 
-    const sidebarAvatar = document.getElementById('user-avatar-sidebar');
-    if(sidebarAvatar) sidebarAvatar.src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
-
-    const impRecycled = document.getElementById('impact-recycled');
-    if(impRecycled) impRecycled.textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
-
-    const impCo2 = document.getElementById('impact-co2');
-    if(impCo2) impCo2.textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
-
-    const impEvents = document.getElementById('impact-events');
-    if(impEvents) impEvents.textContent = user.impact?.events_attended || 0;
+    document.getElementById('impact-recycled').textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
+    document.getElementById('impact-co2').textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
+    document.getElementById('impact-events').textContent = user.impact?.events_attended || 0;
 };
 
 const renderCheckinButtonState = () => {
@@ -115,7 +98,6 @@ const renderCheckinButtonState = () => {
 };
 
 export const openCheckinModal = () => {
-    logActivity('ui_interaction', 'checkin_open', 'Opened Daily Check-in Modal');
     if (state.currentUser.isCheckedInToday) return;
     const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.add('open');
@@ -124,7 +106,6 @@ export const openCheckinModal = () => {
     const calendarContainer = document.getElementById('checkin-modal-calendar');
     calendarContainer.innerHTML = '';
     
-    // Visuals use local time for "Today" centering
     const today = new Date(); 
     
     for (let i = -3; i <= 3; i++) {
@@ -145,6 +126,8 @@ export const openCheckinModal = () => {
             Check-in &amp; Earn ${state.checkInReward} Points
         </button>
     `;
+    
+    logActivity('view_checkin_modal');
 };
 
 export const closeCheckinModal = () => {
@@ -154,12 +137,6 @@ export const closeCheckinModal = () => {
 };
 
 export const handleDailyCheckin = async () => {
-    // Network Check
-    if (!navigator.onLine) {
-        alert("You need internet to claim daily points.");
-        return;
-    }
-
     const checkinButton = document.querySelector('#checkin-modal-button-container button');
     checkinButton.disabled = true;
     checkinButton.textContent = 'Checking in...';
@@ -167,7 +144,6 @@ export const handleDailyCheckin = async () => {
     const optimisticStreak = (state.currentUser.checkInStreak || 0) + 1;
 
     try {
-        // Explicitly send IST Date to DB
         const todayIST = getTodayIST();
 
         const { error } = await supabase.from('daily_checkins').insert({ 
@@ -177,58 +153,55 @@ export const handleDailyCheckin = async () => {
         });
         if (error) throw error;
 
-        logActivity('checkin', 'daily_claim', `Claimed daily points. New streak: ${optimisticStreak}`);
-
         closeCheckinModal();
 
-        await refreshUserData(); 
+        // Log Activity
+        logActivity('daily_checkin', { streak: optimisticStreak, points: state.checkInReward });
 
+        // Optimistic Update
         state.currentUser.checkInStreak = optimisticStreak;
         state.currentUser.isCheckedInToday = true;
-
-        // Invalidate cache so next load gets correct state
-        const CACHE_KEY = `dashboard_${state.currentUser.id}_${todayIST}`;
-        await cacheSet(CACHE_KEY, {
-            isCheckedInToday: true,
-            checkInStreak: optimisticStreak,
-            impact: state.currentUser.impact
-        });
+        
+        // Update Cache immediately
+        await Promise.all([
+            cacheSet(`checkin_${state.currentUser.id}_${todayIST}`, true),
+            cacheSet(`streak_${state.currentUser.id}`, optimisticStreak)
+        ]);
 
         renderCheckinButtonState();
+        await refreshUserData(); 
 
     } catch (err) {
         console.error('Check-in error:', err.message);
         alert(`Failed to check in: ${err.message}`);
         checkinButton.disabled = false;
         checkinButton.textContent = `Check-in & Earn ${state.checkInReward} Points`;
-        logActivity('error', 'checkin_failed', err.message);
     }
 };
 
 export const loadHistoryData = async () => {
     try {
-        const CACHE_KEY = `history_${state.currentUser.id}`;
-        
-        // A. Fast Load
-        const cachedHistory = await cacheGet(CACHE_KEY);
+        const userId = state.currentUser.id;
+
+        // 1. Cache
+        const cachedHistory = await cacheGet(`history_${userId}`);
         if (cachedHistory) {
             state.history = cachedHistory;
             if (document.getElementById('history').classList.contains('active')) renderHistory();
         }
 
-        // B. Network Load
-        const { data, error } = await supabase.from('points_ledger').select('*').eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
+        // 2. Network
+        const { data, error } = await supabase.from('points_ledger').select('*').eq('user_id', userId).order('created_at', { ascending: false });
         if (error) return;
-        
-        const processedHistory = data.map(item => ({
+
+        state.history = data.map(item => ({
             type: item.source_type, description: item.description, points: item.points_delta,
             date: formatDate(item.created_at), 
             icon: getIconForHistory(item.source_type)
         }));
 
-        state.history = processedHistory;
-        await cacheSet(CACHE_KEY, processedHistory);
-
+        // 3. Cache & Render
+        await cacheSet(`history_${userId}`, state.history);
         if (document.getElementById('history').classList.contains('active')) renderHistory();
 
     } catch (err) { console.error('History Load Error:', err); }
@@ -251,9 +224,6 @@ export const renderHistory = () => {
             </div>`;
     });
     if(window.lucide) window.lucide.createIcons();
-    
-    // Log view
-    logActivity('page_view', 'history', 'Viewed Activity History');
 };
 
 export const renderProfile = () => {
@@ -269,27 +239,17 @@ export const renderProfile = () => {
     document.getElementById('profile-student-id').textContent = u.student_id;
     document.getElementById('profile-course').textContent = u.course;
     document.getElementById('profile-email-personal').textContent = u.email;
-
-    logActivity('page_view', 'profile', 'Viewed Profile');
 };
 
 export const setupFileUploads = () => {
     const profileInput = document.getElementById('profile-upload-input');
     if (profileInput) {
         profileInput.addEventListener('change', async (e) => {
-            // Network Check
-            if (!navigator.onLine) {
-                alert("Offline: Cannot upload profile picture.");
-                return;
-            }
-
             const file = e.target.files[0];
             if (!file) return;
-            
             const avatarEl = document.getElementById('profile-avatar');
             const originalSrc = avatarEl.src;
             avatarEl.style.opacity = '0.5';
-            
             try {
                 const imageUrl = await uploadToCloudinary(file);
                 const { error } = await supabase.from('users').update({ profile_img_url: imageUrl }).eq('id', state.currentUser.id);
@@ -299,14 +259,12 @@ export const setupFileUploads = () => {
                 renderProfile();
                 renderDashboardUI(); 
                 
-                logActivity('profile', 'avatar_update', 'Updated profile picture');
+                logActivity('profile_update', { type: 'avatar' });
                 alert('Profile picture updated!');
-
             } catch (err) {
                 console.error('Profile Upload Failed:', err);
                 alert('Failed to upload profile picture.');
                 avatarEl.src = originalSrc; 
-                logActivity('error', 'avatar_upload_fail', err.message);
             } finally {
                 avatarEl.style.opacity = '1';
                 profileInput.value = ''; 
