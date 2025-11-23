@@ -1,21 +1,14 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage, formatDate, getUserLevel, cacheGet, cacheSet, logActivity, setupLazyImages } from './utils.js';
+import { els, getPlaceholderImage, formatDate, getUserLevel, logUserActivity, isLowDataMode } from './utils.js';
 import { refreshUserData } from './app.js';
 
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 const getStore = (storeId) => state.stores.find(s => s.id === storeId);
 
-// 1. Load Data & Extract Stores (Cache-First)
+// 1. Load Data & Extract Stores
 export const loadStoreAndProductData = async () => {
     try {
-        // A. Try Cache First
-        const cachedData = await cacheGet('store_data');
-        if (cachedData) {
-            processStoreData(cachedData);
-        }
-
-        // B. Fetch Fresh Data
         const { data, error } = await supabase.from('products').select(`
                 id, name, description, original_price, discounted_price, ecopoints_cost, store_id, metadata,
                 stores ( id, name, logo_url ), 
@@ -23,62 +16,47 @@ export const loadStoreAndProductData = async () => {
                 product_features ( feature, sort_order ),
                 product_specifications ( spec_key, spec_value, sort_order )
             `).eq('is_active', true);
-            
         if (error) throw error;
 
-        // C. Update Cache & Render
-        await cacheSet('store_data', data);
-        processStoreData(data);
+        // Process Products
+        state.products = data.map(p => ({
+            ...p, 
+            images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
+            highlights: p.product_features?.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature) || [],
+            specs: p.product_specifications?.sort((a,b) => a.sort_order - b.sort_order) || [],
+            storeName: p.stores?.name || 'Unknown Store', 
+            storeLogo: p.stores?.logo_url, 
+            popularity: Math.floor(Math.random() * 50) 
+        }));
 
+        // Extract Unique Stores
+        const storeMap = new Map();
+        state.products.forEach(p => {
+            if (p.stores && !storeMap.has(p.stores.id)) {
+                storeMap.set(p.stores.id, {
+                    id: p.stores.id,
+                    name: p.stores.name,
+                    logo_url: p.stores.logo_url,
+                    itemCount: 0
+                });
+            }
+            if(p.stores) {
+                storeMap.get(p.stores.id).itemCount++;
+            }
+        });
+        state.stores = Array.from(storeMap.values());
+
+        if (document.getElementById('rewards').classList.contains('active')) renderRewards();
     } catch (err) { console.error('Product Load Error:', err); }
 };
 
-const processStoreData = (data) => {
-    // Process Products
-    state.products = data.map(p => ({
-        ...p, 
-        images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
-        highlights: p.product_features?.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature) || [],
-        specs: p.product_specifications?.sort((a,b) => a.sort_order - b.sort_order) || [],
-        storeName: p.stores?.name || 'Unknown Store', 
-        storeLogo: p.stores?.logo_url, 
-        popularity: Math.floor(Math.random() * 50) 
-    }));
-
-    // Extract Unique Stores
-    const storeMap = new Map();
-    state.products.forEach(p => {
-        if (p.stores && !storeMap.has(p.stores.id)) {
-            storeMap.set(p.stores.id, {
-                id: p.stores.id,
-                name: p.stores.name,
-                logo_url: p.stores.logo_url,
-                itemCount: 0
-            });
-        }
-        if(p.stores) {
-            storeMap.get(p.stores.id).itemCount++;
-        }
-    });
-    state.stores = Array.from(storeMap.values());
-
-    if (document.getElementById('rewards').classList.contains('active')) renderRewards();
-};
-
-// 2. Render Rewards (With Store Search & Desktop Grid)
+// 2. Render Rewards (With Store Search)
 export const renderRewards = () => {
     els.productGrid.innerHTML = '';
     
-    // Ensure Grid Classes are responsive
-    els.productGrid.className = "grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4";
-
     // --- SEARCH LOGIC ---
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
-
-    if (searchTerm.length > 2) {
-        logActivity('search_store', { query: searchTerm });
-    }
 
     // Filter Stores
     let matchingStores = [];
@@ -104,16 +82,18 @@ export const renderRewards = () => {
         }
     });
 
+    // Update Grid Class for Responsiveness
+    els.productGrid.className = "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4";
+
     // --- RENDER STORES (If Searching) ---
     if (matchingStores.length > 0) {
-        // On mobile: Horizontal Scroll. On Desktop: Grid
         els.productGrid.innerHTML += `
-            <div class="col-span-2 lg:col-span-4 xl:col-span-5 mb-2">
+            <div class="col-span-2 md:col-span-3 lg:col-span-4 mb-2">
                 <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Matching Stores</h3>
-                <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar lg:grid lg:grid-cols-4 xl:grid-cols-5">
+                <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                     ${matchingStores.map(s => `
-                        <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px] hover:shadow-md hover:border-green-200 dark:hover:border-green-800">
-                            <img data-src="${s.logo_url || getPlaceholderImage('40x40')}" src="${getPlaceholderImage('40x40', 'Loading')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3 lazy-img">
+                        <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px]">
+                            <img src="${s.logo_url || getPlaceholderImage('40x40')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3">
                             <div>
                                 <p class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${s.name}</p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">${s.itemCount} Items</p>
@@ -127,19 +107,19 @@ export const renderRewards = () => {
 
     // --- RENDER PRODUCTS ---
     if (products.length === 0 && matchingStores.length === 0) { 
-        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2 lg:col-span-4 py-8">No matches found.</p>`; 
+        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2 md:col-span-3 lg:col-span-4 py-8">No matches found.</p>`; 
         return; 
     }
 
     products.forEach(p => {
         const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
         els.productGrid.innerHTML += `
-            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform hover:shadow-xl hover:-translate-y-1" onclick="showProductDetailPage('${p.id}')">
-                <img data-src="${imageUrl}" src="${getPlaceholderImage('300x225', 'Loading')}" class="w-full h-40 object-cover lazy-img">
+            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform hover:shadow-md" onclick="showProductDetailPage('${p.id}')">
+                <img src="${imageUrl}" class="w-full h-40 object-cover" onerror="this.src='${getPlaceholderImage('300x225')}'" loading="lazy">
                 <div class="p-3 flex flex-col flex-grow">
                     <div class="flex items-center mb-1">
-                        <img data-src="${p.storeLogo || getPlaceholderImage('40x40')}" src="${getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600 lazy-img">
-                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400">${p.storeName}</p>
+                        <img src="${p.storeLogo || getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600">
+                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 truncate">${p.storeName}</p>
                     </div>
                     <p class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate mt-1">${p.name}</p>
                     <div class="mt-auto pt-2">
@@ -154,30 +134,29 @@ export const renderRewards = () => {
                 </div>
             </div>`;
     });
-    
-    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 3. Store Page (Desktop-Optimized)
+// 3. Store Page
 export const openStorePage = (storeId) => {
     const store = getStore(storeId);
     if (!store) return;
-
-    logActivity('view_store', { store_id: storeId, store_name: store.name });
+    
+    // Log Activity
+    logUserActivity('view_store', `Visited store: ${store.name}`, { storeId });
 
     const storeProducts = state.products.filter(p => p.store_id === storeId);
     
     const storeDetailEl = document.getElementById('store-detail-page');
     storeDetailEl.innerHTML = `
-        <div class="relative w-full h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto pb-24 lg:pb-0">
-            <div class="bg-white dark:bg-gray-950 p-6 pb-8 border-b border-gray-200 dark:border-gray-800 shadow-sm relative">
+        <div class="relative w-full h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto pb-24">
+            <div class="bg-white dark:bg-gray-950 p-6 pb-8 border-b border-gray-200 dark:border-gray-800 shadow-sm relative sticky top-0 z-20">
                 <button onclick="showPage('rewards')" class="absolute top-4 left-4 p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <i data-lucide="arrow-left" class="w-5 h-5"></i>
                 </button>
                 
                 <div class="flex flex-col items-center text-center mt-4">
-                    <img data-src="${store.logo_url || getPlaceholderImage('80x80')}" src="${getPlaceholderImage('80x80')}" class="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 shadow-md mb-3 object-cover lazy-img">
+                    <img src="${store.logo_url || getPlaceholderImage('80x80')}" class="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 shadow-md mb-3 object-cover">
                     <h1 class="text-2xl font-black text-gray-900 dark:text-white">${store.name}</h1>
                     <div class="flex items-center gap-4 mt-2">
                         <span class="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Verified Store</span>
@@ -186,7 +165,7 @@ export const openStorePage = (storeId) => {
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4 p-6 lg:grid-cols-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-6">
                 <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center">
                     <p class="text-2xl font-black text-gray-900 dark:text-white">${storeProducts.length}</p>
                     <p class="text-xs text-gray-500 uppercase tracking-wider font-bold">Total Items</p>
@@ -199,12 +178,12 @@ export const openStorePage = (storeId) => {
 
             <div class="px-6 pb-6">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">All Products</h3>
-                <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     ${storeProducts.map(p => {
                         const img = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage();
                         return `
-                        <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform cursor-pointer hover:shadow-lg" onclick="showProductDetailPage('${p.id}')">
-                            <img data-src="${img}" src="${getPlaceholderImage('300x200', 'Loading')}" class="w-full h-32 object-cover lazy-img">
+                        <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform cursor-pointer hover:shadow-md" onclick="showProductDetailPage('${p.id}')">
+                            <img src="${img}" class="w-full h-32 object-cover" loading="lazy">
                             <div class="p-3">
                                 <p class="font-bold text-gray-900 dark:text-white text-xs line-clamp-1 mb-1">${p.name}</p>
                                 <div class="flex items-center justify-between">
@@ -223,17 +202,17 @@ export const openStorePage = (storeId) => {
         </div>
     `;
     window.showPage('store-detail-page');
-    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 }
 
 
-// 4. Product Detail (Desktop Friendly)
+// 4. Product Detail
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
 
-    logActivity('view_product', { product_id: productId, product_name: product.name });
+    // Log Activity
+    logUserActivity('view_product', `Viewed product: ${product.name}`, { productId, storeId: product.store_id });
 
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage();
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
@@ -241,83 +220,78 @@ export const showProductDetailPage = (productId) => {
     const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'FINISH', spec_value: 'Matte handcrafted' }, { spec_key: 'PRODUCT_TYPE', spec_value: 'Vintage Letter' }];
 
     els.productDetailPage.innerHTML = `
-        <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28 lg:pb-0">
+        <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
             
-            <div class="flex flex-col lg:flex-row h-full">
-            
-                <div class="relative w-full lg:w-1/2 h-[50vh] lg:h-full flex-shrink-0 bg-gray-100 dark:bg-gray-900">
-                    <img data-src="${imageUrl}" src="${getPlaceholderImage('400x600', 'Loading')}" class="w-full h-full object-cover lazy-img">
-                    <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
-                        <i data-lucide="arrow-left" class="w-6 h-6"></i>
-                    </button>
-                    <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent lg:hidden"></div>
+            <div class="relative w-full h-[60vh] md:h-[50vh] flex-shrink-0">
+                <img src="${imageUrl}" class="w-full h-full object-cover" onerror="this.src='${getPlaceholderImage()}'">
+                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
+                    <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                </button>
+                <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent"></div>
+            </div>
+
+            <div class="relative px-6 -mt-10 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh] max-w-4xl mx-auto">
+                <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50"></div>
+
+                <div class="mb-6">
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
+                    
+                    <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform">
+                         <img src="${product.storeLogo || getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full">
+                         <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
+                         <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
+                    </div>
+
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                        ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
+                    </p>
                 </div>
 
-                <div class="relative w-full lg:w-1/2 px-6 -mt-10 lg:mt-0 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] lg:rounded-none shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh] lg:h-full lg:overflow-y-auto lg:p-10">
-                    <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50 lg:hidden"></div>
-
-                    <div class="mb-6">
-                        <h1 class="text-2xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
-                        
-                        <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform hover:bg-gray-200 dark:hover:bg-gray-700">
-                             <img data-src="${product.storeLogo || getPlaceholderImage('20x20')}" src="${getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full lazy-img">
-                             <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
-                             <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
-                        </div>
-
-                        <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
-                        <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                            ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
-                        </p>
-                    </div>
-
-                    <div class="mb-8">
-                        <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
-                        <div class="space-y-3">
-                            ${highlights.map(h => `
-                                <div class="flex items-start p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
-                                    <div class="flex-shrink-0 mt-0.5"><div class="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center"><i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i></div></div>
-                                    <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-
-                    <div class="mb-8">
-                        <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
-                        <div class="grid grid-cols-2 gap-3">
-                            ${specs.map(s => `
-                                <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
-                                    <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">${s.spec_value}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-
-                    <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
-                        <div class="flex items-center gap-2 mb-2"><i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i><h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3></div>
-                        <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.</p>
-                    </div>
-
-                    <div class="fixed bottom-0 left-0 right-0 lg:absolute lg:bottom-0 lg:left-0 lg:right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
-                        <div>
-                            <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
-                            <div class="flex items-center gap-1.5">
-                                <span class="text-3xl font-black text-gray-900 dark:text-white">₹${product.discounted_price}</span>
-                                <span class="text-gray-400 text-sm font-medium">+</span>
-                                <div class="flex items-center text-[#00d685] font-bold text-xl"><i data-lucide="leaf" class="w-5 h-5 mr-1 fill-current"></i><span>${product.ecopoints_cost}</span></div>
+                <div class="mb-8">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
+                    <div class="space-y-3">
+                        ${highlights.map(h => `
+                            <div class="flex items-start p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+                                <div class="flex-shrink-0 mt-0.5"><div class="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center"><i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i></div></div>
+                                <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
                             </div>
-                        </div>
-                        <button onclick="openPurchaseModal('${product.id}')" ${canAfford ? '' : 'disabled'} class="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-black dark:hover:bg-gray-200 font-bold py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"><span>${canAfford ? 'Redeem Now' : 'Low Points'}</span><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                        `).join('')}
                     </div>
                 </div>
+
+                <div class="mb-8">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        ${specs.map(s => `
+                            <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">${s.spec_value}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
+                    <div class="flex items-center gap-2 mb-2"><i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i><h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3></div>
+                    <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.</p>
+                </div>
+            </div>
+
+            <div class="absolute bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 max-w-4xl mx-auto flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
+                <div>
+                    <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-3xl font-black text-gray-900 dark:text-white">₹${product.discounted_price}</span>
+                        <span class="text-gray-400 text-sm font-medium">+</span>
+                        <div class="flex items-center text-[#00d685] font-bold text-xl"><i data-lucide="leaf" class="w-5 h-5 mr-1 fill-current"></i><span>${product.ecopoints_cost}</span></div>
+                    </div>
+                </div>
+                <button onclick="openPurchaseModal('${product.id}')" ${canAfford ? '' : 'disabled'} class="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-black dark:hover:bg-gray-200 font-bold py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"><span>${canAfford ? 'Redeem Now' : 'Low Points'}</span><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
             </div>
         </div>
     `;
-    
     window.showPage('product-detail-page');
-    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -339,17 +313,12 @@ export const closePurchaseModal = () => {
 };
 
 export const confirmPurchase = async (productId) => {
-    // Offline Check
-    if (!navigator.onLine) {
-        alert("You are currently offline. Please connect to the internet to complete your purchase.");
-        return;
-    }
-
     try {
         const product = getProduct(productId);
         if (!product || state.currentUser.current_points < product.ecopoints_cost) { alert("You do not have enough points."); return; }
         
-        logActivity('purchase_attempt', { product_id: productId });
+        // Log Activity
+        logUserActivity('purchase_attempt', `Attempting to buy ${product.name}`, { productId, cost: product.ecopoints_cost });
 
         const confirmBtn = document.getElementById('confirm-purchase-btn');
         confirmBtn.disabled = true; confirmBtn.textContent = 'Processing...';
@@ -363,60 +332,47 @@ export const confirmPurchase = async (productId) => {
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
-        logActivity('purchase_success', { order_id: orderData.id, product: product.name });
-        
+        // Log Success
+        logUserActivity('purchase_success', `Bought ${product.name}`, { orderId: orderData.id });
+
         closePurchaseModal();
         await Promise.all([refreshUserData(), loadUserRewardsData()]);
         window.showPage('my-rewards');
     } catch (err) { 
         console.error('Purchase Failed:', err); 
-        logActivity('purchase_fail', { error: err.message });
+        logUserActivity('purchase_error', err.message);
         alert(`Purchase failed: ${err.message}`); 
     }
 };
 
-// 6. My Rewards (Cache-First)
+// 6. My Rewards
 export const loadUserRewardsData = async () => {
     try {
-        // A. Cache First
-        const cachedRewards = await cacheGet('user_rewards');
-        if (cachedRewards) {
-            processRewards(cachedRewards);
-        }
-
-        // B. Network
         const { data, error } = await supabase.from('orders').select(`id, created_at, status, order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )`).eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
         if (error) return;
-
-        // C. Update Cache & Render
-        await cacheSet('user_rewards', data);
-        processRewards(data);
-
+        state.userRewards = data.map(order => {
+            const item = order.order_items[0]; if (!item) return null;
+            return { userRewardId: order.id, purchaseDate: formatDate(order.created_at), status: order.status, productName: item.products.name, storeName: item.products.stores.name, productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() };
+        }).filter(Boolean);
+        if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
     } catch (err) { console.error('User Rewards Load Error:', err); }
-};
-
-const processRewards = (data) => {
-    state.userRewards = data.map(order => {
-        const item = order.order_items[0]; if (!item) return null;
-        return { userRewardId: order.id, purchaseDate: formatDate(order.created_at), status: order.status, productName: item.products.name, storeName: item.products.stores.name, productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() };
-    }).filter(Boolean);
-    
-    if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
 };
 
 export const renderMyRewardsPage = () => {
     els.allRewardsList.innerHTML = '';
-    logActivity('view_my_rewards');
     
+    // Add grid class for desktop
+    els.allRewardsList.className = "space-y-4 max-w-3xl mx-auto md:grid md:grid-cols-2 md:space-y-0 md:gap-4";
+
     if (state.userRewards.length === 0) { 
+        els.allRewardsList.className = "flex flex-col items-center justify-center py-12 opacity-60 w-full";
         els.allRewardsList.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-12 opacity-60">
-                <div class="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                    <i data-lucide="shopping-bag" class="w-8 h-8 text-gray-400"></i>
-                </div>
-                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">No orders yet.</p>
-                <button onclick="showPage('rewards')" class="mt-4 text-brand-600 font-bold text-sm hover:underline">Visit Store</button>
-            </div>`; 
+            <div class="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                <i data-lucide="shopping-bag" class="w-8 h-8 text-gray-400"></i>
+            </div>
+            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">No orders yet.</p>
+            <button onclick="showPage('rewards')" class="mt-4 text-brand-600 font-bold text-sm hover:underline">Visit Store</button>
+        `; 
         if(window.lucide) window.lucide.createIcons();
         return; 
     }
@@ -443,10 +399,10 @@ export const renderMyRewardsPage = () => {
         }
 
         els.allRewardsList.innerHTML += `
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden group">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden group h-full flex flex-col justify-between">
                 <div class="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/20 dark:to-gray-700/0 rounded-full z-0"></div>
                 <div class="relative z-10 flex gap-4">
-                    <div class="flex-shrink-0"><img data-src="${ur.productImage}" src="${getPlaceholderImage('80x80', 'Loading')}" class="w-20 h-20 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shadow-sm lazy-img"></div>
+                    <div class="flex-shrink-0"><img src="${ur.productImage}" class="w-20 h-20 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shadow-sm" onerror="this.src='${getPlaceholderImage()}'"></div>
                     <div class="flex-grow min-w-0">
                         <div class="flex justify-between items-start mb-1"><p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate pr-2">${ur.storeName}</p>${statusBadge}</div>
                         <h3 class="text-sm font-black text-gray-900 dark:text-white leading-tight mb-1 line-clamp-2">${ur.productName}</h3>
@@ -458,8 +414,6 @@ export const renderMyRewardsPage = () => {
             </div>
         `;
     });
-    
-    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -467,7 +421,7 @@ export const openRewardQrModal = (userRewardId) => {
     const ur = state.userRewards.find(r => r.userRewardId === userRewardId);
     if (!ur) return;
     
-    logActivity('view_reward_qr', { order_id: userRewardId });
+    logUserActivity('view_qr', `Opened QR for order`, { userRewardId });
 
     const qrValue = `ecocampus-order:${userRewardId}-user:${state.currentUser.id}`;
     els.qrModal.innerHTML = `
@@ -486,9 +440,6 @@ export const closeQrModal = () => {
 export const renderEcoPointsPage = () => {
     const u = state.currentUser;
     if (!u) return;
-    
-    logActivity('view_ecopoints_page');
-
     const balanceEl = document.getElementById('ecopoints-balance');
     if(balanceEl) balanceEl.textContent = u.current_points;
     const currentLvl = getUserLevel(u.lifetime_points);
@@ -505,8 +456,6 @@ export const renderEcoPointsPage = () => {
     const levelsContainer = document.getElementById('all-levels-list');
     if (levelsContainer) {
         levelsContainer.innerHTML = state.levels.map((l, i) => {
-            const isCompleted = u.lifetime_points >= l.nextMin;
-            const isCurrent = u.lifetime_points >= l.minPoints && u.lifetime_points < l.nextMin;
             const isLocked = u.lifetime_points < l.minPoints;
             let colorClass = isLocked ? 'text-gray-400 dark:text-gray-600' : 'text-green-600 dark:text-green-400';
             let borderClass = isLocked ? 'border-gray-200 dark:border-gray-700' : 'border-green-500';
