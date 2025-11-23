@@ -1,4 +1,3 @@
-import { supabase } from './supabase-client.js';
 import { CLOUDINARY_API_URL, CLOUDINARY_UPLOAD_PRESET, TICK_IMAGES, state } from './state.js';
 import { renderDashboard } from './dashboard.js';
 import { renderRewards, renderMyRewardsPage } from './store.js';
@@ -8,7 +7,79 @@ import { renderChallengesPage } from './challenges.js';
 import { renderEventsPage } from './events.js'; 
 import { renderProfile } from './dashboard.js';
 import { showLeaderboardTab } from './social.js';
+import { supabase } from './supabase-client.js';
 
+// ==========================================
+// 🚀 PERFORMANCE & OFFLINE UTILS
+// ==========================================
+
+// 1. Caching Engine (localForage)
+export const cacheGet = async (key) => {
+    try {
+        return await localforage.getItem(key);
+    } catch (err) {
+        console.warn('Cache Read Error:', err);
+        return null;
+    }
+};
+
+export const cacheSet = async (key, value) => {
+    try {
+        await localforage.setItem(key, value);
+    } catch (err) {
+        console.warn('Cache Write Error:', err);
+    }
+};
+
+// 2. Low-Data Mode Detection
+export const isLowDataMode = () => {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    return connection ? connection.saveData : false;
+};
+
+// 3. Lazy Loading Images (Intersection Observer)
+export const setupLazyImages = () => {
+    const images = document.querySelectorAll('.lazy-img');
+    const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                const src = img.getAttribute('data-src');
+                if (src) {
+                    img.src = src;
+                    img.classList.add('loaded');
+                }
+                observer.unobserve(img);
+            }
+        });
+    });
+    images.forEach(img => observer.observe(img));
+};
+
+// 4. Centralized Activity Logger
+export const logActivity = async (actionType, details = {}) => {
+    if (!state.currentUser) return; // Don't log if not logged in
+    
+    // Silence errors to not disrupt user flow
+    try {
+        await supabase.from('user_activity_log').insert({
+            user_id: state.currentUser.id,
+            action_type: actionType,
+            metadata: details, // Stores JSON details
+            created_at: new Date().toISOString()
+        });
+    } catch (err) {
+        // Just console warn, don't alert user
+        console.warn('Log Activity Failed:', err); 
+    }
+};
+
+
+// ==========================================
+// 🎨 UI & DOM UTILS
+// ==========================================
+
+// DOM Cache
 export const els = {
     get pages() { return document.querySelectorAll('.page'); },
     get sidebar() { return document.getElementById('sidebar'); },
@@ -36,85 +107,12 @@ export const els = {
     get qrModal() { return document.getElementById('qr-modal'); }
 };
 
-// --- OFFLINE CACHE ENGINE ---
-export const cacheGet = async (key) => {
-    if (!window.localforage) return null;
-    try { return await window.localforage.getItem(key); } 
-    catch (err) { console.warn(`Cache GET failed:`, err); return null; }
-};
-
-export const cacheSet = async (key, value) => {
-    if (!window.localforage) return;
-    try { await window.localforage.setItem(key, value); } 
-    catch (err) { console.warn(`Cache SET failed:`, err); }
-};
-
-// --- ACTIVITY LOGGING ---
-export const logActivity = async (actionType, description, metadata = null) => {
-    if (!state.currentUser && actionType !== 'auth') return;
-    if (!navigator.onLine) return;
-    try {
-        supabase.from('user_activity_log').insert({
-            user_id: state.currentUser?.id,
-            action_type: actionType,
-            description: description,
-            metadata: metadata ? JSON.stringify(metadata) : null
-        }).then(() => {});
-    } catch (err) {}
-};
-
-// --- PERFORMANCE UTILS ---
-export const setupLazyImages = () => {
-    // Fix: Ensure we select all lazy images
-    const images = document.querySelectorAll('.lazy-img');
-    
-    if ('IntersectionObserver' in window) {
-        const imageObserver = new IntersectionObserver((entries, observer) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const img = entry.target;
-                    const src = img.getAttribute('data-src');
-                    if (src) {
-                        img.src = src;
-                        img.classList.add('loaded');
-                        img.removeAttribute('data-src');
-                    }
-                    observer.unobserve(img);
-                }
-            });
-        });
-        images.forEach(img => imageObserver.observe(img));
-    } else {
-        // Fallback
-        images.forEach(img => {
-            const src = img.getAttribute('data-src');
-            if (src) img.src = src;
-        });
-    }
-};
-
-// Use this export for internal calls only
-export const debounce = (func, wait) => {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-};
-
-export const isLowDataMode = () => {
-    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (conn && (conn.saveData === true || conn.effectiveType?.includes('2g'))) return true;
-    return false;
-};
-
-// --- FORMATTING ---
 export const getPlaceholderImage = (size = '400x300', text = 'EcoCampus') => `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
 
 export const getTickImg = (tickType) => {
     if (!tickType) return '';
     const url = TICK_IMAGES[tickType.toLowerCase()];
-    return url ? `<img src="${url}" class="tick-icon" alt="${tickType}">` : '';
+    return url ? `<img src="${url}" class="tick-icon" alt="${tickType} tick">` : '';
 };
 
 export const getUserLevel = (points) => {
@@ -137,14 +135,26 @@ export const getUserLevel = (points) => {
     return { ...current, progress, progressText };
 };
 
-export const getTodayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+// --- NEW: IST DATE LOGIC ---
 
+// 1. Get Today's Date string (YYYY-MM-DD) specifically for IST
+export const getTodayIST = () => {
+    // 'en-CA' format is always YYYY-MM-DD
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+};
+
+// 2. Format any date string to show in IST
 export const formatDate = (dateString, options = {}) => {
     if (!dateString) return '...';
-    return new Date(dateString).toLocaleDateString('en-IN', { 
-        year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata', ...options 
-    });
+    const defaultOptions = { 
+        year: 'numeric', month: 'short', day: 'numeric',
+        timeZone: 'Asia/Kolkata' // FORCE IST
+    };
+    const finalOptions = { ...defaultOptions, ...options };
+    return new Date(dateString).toLocaleDateString('en-IN', finalOptions);
 };
+
+// ---------------------------
 
 export const getIconForHistory = (type) => {
     const icons = { 'checkin': 'calendar-check', 'event': 'calendar-check', 'challenge': 'award', 'plastic': 'recycle', 'order': 'shopping-cart', 'coupon': 'ticket', 'quiz': 'brain' };
@@ -152,16 +162,20 @@ export const getIconForHistory = (type) => {
 };
 
 export const getIconForChallenge = (type) => {
-    const icons = { 'Quiz': 'brain', 'Upload': 'camera', 'selfie': 'camera' };
+    const icons = { 'Quiz': 'brain', 'Upload': 'camera', 'selfie': 'camera', 'spot': 'eye' };
     return icons[type] || 'award';
 };
 
-export const getUserInitials = (fullName) => fullName ? fullName.split(' ').map(n => n[0]).join('').toUpperCase() : '..';
+export const getUserInitials = (fullName) => {
+    if (!fullName) return '..';
+    return fullName.split(' ').map(n => n[0]).join('').toUpperCase();
+};
 
 export const uploadToCloudinary = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    
     try {
         const res = await fetch(CLOUDINARY_API_URL, { method: 'POST', body: formData });
         const data = await res.json();
@@ -170,18 +184,16 @@ export const uploadToCloudinary = async (file) => {
     } catch (err) { console.error("Cloudinary Upload Error:", err); throw err; }
 };
 
-// --- NAVIGATION ---
 export const showPage = (pageId, addToHistory = true) => {
     els.pages.forEach(p => p.classList.remove('active'));
+    
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
-    // Cleanup sub-pages
     if (!['store-detail-page', 'product-detail-page'].includes(pageId)) {
-        if(els.storeDetailPage) els.storeDetailPage.innerHTML = ''; 
-        if(els.productDetailPage) els.productDetailPage.innerHTML = '';
+        els.storeDetailPage.innerHTML = ''; els.productDetailPage.innerHTML = '';
     }
-    if (pageId !== 'department-detail-page' && els.departmentDetailPage) els.departmentDetailPage.innerHTML = '';
+    if (pageId !== 'department-detail-page') els.departmentDetailPage.innerHTML = '';
 
     document.querySelectorAll('.nav-item, .sidebar-nav-item').forEach(btn => {
         const onclickVal = btn.getAttribute('onclick');
@@ -190,9 +202,13 @@ export const showPage = (pageId, addToHistory = true) => {
 
     document.querySelector('.main-content').scrollTop = 0;
 
-    if (addToHistory) window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
+    if (addToHistory) {
+        window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
+    }
+    
+    // Log Page Navigation (Debounced implicitly by user speed)
+    // We log specific page loads inside their render functions for better context
 
-    // Dispatch Renders
     if (pageId === 'dashboard') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderDashboard(); } 
     else if (pageId === 'leaderboard') { showLeaderboardTab('student'); } 
     else if (pageId === 'rewards') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderRewardsWrapper && window.renderRewardsWrapper(); } 
@@ -205,13 +221,15 @@ export const showPage = (pageId, addToHistory = true) => {
     else { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); }
 
     toggleSidebar(true); 
-    setTimeout(setupLazyImages, 100); // Trigger Lazy Load
     if(window.lucide) window.lucide.createIcons();
 };
 
 window.addEventListener('popstate', (event) => {
-    if (event.state && event.state.pageId) showPage(event.state.pageId, false);
-    else showPage('dashboard', false); 
+    if (event.state && event.state.pageId) {
+        showPage(event.state.pageId, false);
+    } else {
+        showPage('dashboard', false); 
+    }
 });
 
 export const toggleSidebar = (forceClose = false) => {
@@ -226,6 +244,6 @@ export const toggleSidebar = (forceClose = false) => {
     }
 };
 
-// Attach globals
 window.showPage = showPage;
 window.toggleSidebar = toggleSidebar;
+window.setupLazyImagesWrapper = setupLazyImages;
