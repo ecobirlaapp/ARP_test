@@ -1,27 +1,21 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage, formatDate, getUserLevel, logActivity, cacheGet, cacheSet } from './utils.js';
+import { els, getPlaceholderImage, formatDate, getUserLevel, cacheGet, cacheSet, logActivity, setupLazyImages } from './utils.js';
 import { refreshUserData } from './app.js';
 
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 const getStore = (storeId) => state.stores.find(s => s.id === storeId);
 
-// 1. Load Data & Extract Stores (Cache-then-Network)
+// 1. Load Data (Cache-First)
 export const loadStoreAndProductData = async () => {
     try {
-        const CACHE_KEY = 'store_products_data';
-
-        // A. Fast Load: Cache
-        const cachedData = await cacheGet(CACHE_KEY);
+        // A. Try Cache First
+        const cachedData = await cacheGet('store_data');
         if (cachedData) {
-            state.products = cachedData.products;
-            state.stores = cachedData.stores;
-            if (document.getElementById('rewards').classList.contains('active')) {
-                renderRewards(false); // Render without logging view again
-            }
+            processStoreData(cachedData);
         }
 
-        // B. Network Load: Fresh Data
+        // B. Fetch Fresh Data
         const { data, error } = await supabase.from('products').select(`
                 id, name, description, original_price, discounted_price, ecopoints_cost, store_id, metadata,
                 stores ( id, name, logo_url ), 
@@ -29,60 +23,59 @@ export const loadStoreAndProductData = async () => {
                 product_features ( feature, sort_order ),
                 product_specifications ( spec_key, spec_value, sort_order )
             `).eq('is_active', true);
-        
-        if (error) return; // Keep showing cached data if network fails
+            
+        if (error) throw error;
 
-        // Process Products
-        const processedProducts = data.map(p => ({
-            ...p, 
-            images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
-            highlights: p.product_features?.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature) || [],
-            specs: p.product_specifications?.sort((a,b) => a.sort_order - b.sort_order) || [],
-            storeName: p.stores?.name || 'Unknown Store', 
-            storeLogo: p.stores?.logo_url, 
-            popularity: Math.floor(Math.random() * 50) 
-        }));
+        // C. Update Cache & Render
+        await cacheSet('store_data', data);
+        processStoreData(data);
 
-        // Extract Unique Stores
-        const storeMap = new Map();
-        processedProducts.forEach(p => {
-            if (p.stores && !storeMap.has(p.stores.id)) {
-                storeMap.set(p.stores.id, {
-                    id: p.stores.id,
-                    name: p.stores.name,
-                    logo_url: p.stores.logo_url,
-                    itemCount: 0
-                });
-            }
-            if(p.stores) {
-                storeMap.get(p.stores.id).itemCount++;
-            }
-        });
-        
-        const processedStores = Array.from(storeMap.values());
-
-        // Update State & Cache
-        state.products = processedProducts;
-        state.stores = processedStores;
-        
-        await cacheSet(CACHE_KEY, { products: processedProducts, stores: processedStores });
-
-        if (document.getElementById('rewards').classList.contains('active')) renderRewards();
     } catch (err) { console.error('Product Load Error:', err); }
 };
 
+const processStoreData = (data) => {
+    // Process Products
+    state.products = data.map(p => ({
+        ...p, 
+        images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
+        highlights: p.product_features?.sort((a,b) => a.sort_order - b.sort_order).map(f => f.feature) || [],
+        specs: p.product_specifications?.sort((a,b) => a.sort_order - b.sort_order) || [],
+        storeName: p.stores?.name || 'Unknown Store', 
+        storeLogo: p.stores?.logo_url, 
+        popularity: Math.floor(Math.random() * 50) 
+    }));
+
+    // Extract Unique Stores
+    const storeMap = new Map();
+    state.products.forEach(p => {
+        if (p.stores && !storeMap.has(p.stores.id)) {
+            storeMap.set(p.stores.id, {
+                id: p.stores.id,
+                name: p.stores.name,
+                logo_url: p.stores.logo_url,
+                itemCount: 0
+            });
+        }
+        if(p.stores) {
+            storeMap.get(p.stores.id).itemCount++;
+        }
+    });
+    state.stores = Array.from(storeMap.values());
+
+    if (document.getElementById('rewards').classList.contains('active')) renderRewards();
+};
+
 // 2. Render Rewards (With Store Search)
-export const renderRewards = (shouldLog = true) => {
+export const renderRewards = () => {
     els.productGrid.innerHTML = '';
-    
-    // Log View
-    if (shouldLog && document.getElementById('rewards').classList.contains('active')) {
-        logActivity('page_view', 'store', 'Viewed Eco-Store');
-    }
     
     // --- SEARCH LOGIC ---
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
+
+    if (searchTerm.length > 2) {
+        logActivity('search_store', { query: searchTerm });
+    }
 
     // Filter Stores
     let matchingStores = [];
@@ -116,7 +109,7 @@ export const renderRewards = (shouldLog = true) => {
                 <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                     ${matchingStores.map(s => `
                         <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px]">
-                            <img src="${s.logo_url || getPlaceholderImage('40x40')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3">
+                            <img data-src="${s.logo_url || getPlaceholderImage('40x40')}" src="${getPlaceholderImage('40x40', 'Loading')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3 lazy-img">
                             <div>
                                 <p class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${s.name}</p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">${s.itemCount} Items</p>
@@ -138,10 +131,10 @@ export const renderRewards = (shouldLog = true) => {
         const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
         els.productGrid.innerHTML += `
             <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform" onclick="showProductDetailPage('${p.id}')">
-                <img loading="lazy" src="${imageUrl}" class="w-full h-40 object-cover bg-gray-100 dark:bg-gray-800" onerror="this.src='${getPlaceholderImage('300x225')}'">
+                <img data-src="${imageUrl}" src="${getPlaceholderImage('300x225', 'Loading')}" class="w-full h-40 object-cover lazy-img">
                 <div class="p-3 flex flex-col flex-grow">
                     <div class="flex items-center mb-1">
-                        <img src="${p.storeLogo || getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600">
+                        <img data-src="${p.storeLogo || getPlaceholderImage('40x40')}" src="${getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600 lazy-img">
                         <p class="text-xs font-medium text-gray-600 dark:text-gray-400">${p.storeName}</p>
                     </div>
                     <p class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate mt-1">${p.name}</p>
@@ -157,15 +150,17 @@ export const renderRewards = (shouldLog = true) => {
                 </div>
             </div>`;
     });
+    
+    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 3. Store Page (Info + Product Grid)
+// 3. Store Page
 export const openStorePage = (storeId) => {
     const store = getStore(storeId);
     if (!store) return;
-    
-    logActivity('page_view', 'store_detail', `Viewed Store: ${store.name}`);
+
+    logActivity('view_store', { store_id: storeId, store_name: store.name });
 
     const storeProducts = state.products.filter(p => p.store_id === storeId);
     
@@ -178,7 +173,7 @@ export const openStorePage = (storeId) => {
                 </button>
                 
                 <div class="flex flex-col items-center text-center mt-4">
-                    <img src="${store.logo_url || getPlaceholderImage('80x80')}" class="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 shadow-md mb-3 object-cover">
+                    <img data-src="${store.logo_url || getPlaceholderImage('80x80')}" src="${getPlaceholderImage('80x80')}" class="w-20 h-20 rounded-full border-4 border-white dark:border-gray-800 shadow-md mb-3 object-cover lazy-img">
                     <h1 class="text-2xl font-black text-gray-900 dark:text-white">${store.name}</h1>
                     <div class="flex items-center gap-4 mt-2">
                         <span class="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Verified Store</span>
@@ -205,7 +200,7 @@ export const openStorePage = (storeId) => {
                         const img = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage();
                         return `
                         <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform cursor-pointer" onclick="showProductDetailPage('${p.id}')">
-                            <img loading="lazy" src="${img}" class="w-full h-32 object-cover bg-gray-100 dark:bg-gray-800">
+                            <img data-src="${img}" src="${getPlaceholderImage('300x200', 'Loading')}" class="w-full h-32 object-cover lazy-img">
                             <div class="p-3">
                                 <p class="font-bold text-gray-900 dark:text-white text-xs line-clamp-1 mb-1">${p.name}</p>
                                 <div class="flex items-center justify-between">
@@ -223,7 +218,9 @@ export const openStorePage = (storeId) => {
             </div>
         </div>
     `;
+    
     window.showPage('store-detail-page');
+    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 }
 
@@ -232,8 +229,8 @@ export const openStorePage = (storeId) => {
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
-    
-    logActivity('page_view', 'product_detail', `Viewed Product: ${product.name}`);
+
+    logActivity('view_product', { product_id: productId, product_name: product.name });
 
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage();
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
@@ -244,7 +241,7 @@ export const showProductDetailPage = (productId) => {
         <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
             
             <div class="relative w-full h-[60vh] flex-shrink-0">
-                <img src="${imageUrl}" class="w-full h-full object-cover" onerror="this.src='${getPlaceholderImage()}'">
+                <img data-src="${imageUrl}" src="${getPlaceholderImage('400x600', 'Loading')}" class="w-full h-full object-cover lazy-img">
                 <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
                     <i data-lucide="arrow-left" class="w-6 h-6"></i>
                 </button>
@@ -258,7 +255,7 @@ export const showProductDetailPage = (productId) => {
                     <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
                     
                     <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform">
-                         <img src="${product.storeLogo || getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full">
+                         <img data-src="${product.storeLogo || getPlaceholderImage('20x20')}" src="${getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full lazy-img">
                          <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
                          <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
                     </div>
@@ -312,13 +309,14 @@ export const showProductDetailPage = (productId) => {
             </div>
         </div>
     `;
+    
     window.showPage('product-detail-page');
+    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
 // 5. Purchase Modal Logic
 export const openPurchaseModal = (productId) => {
-    logActivity('ui_interaction', 'initiate_purchase', `Clicked Buy for Product ID: ${productId}`);
     const product = getProduct(productId);
     if (!product) return;
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage('100x100');
@@ -335,9 +333,9 @@ export const closePurchaseModal = () => {
 };
 
 export const confirmPurchase = async (productId) => {
-    // Network Check
+    // Offline Check
     if (!navigator.onLine) {
-        alert("Offline: Cannot complete purchase. Please check internet.");
+        alert("You are currently offline. Please connect to the internet to complete your purchase.");
         return;
     }
 
@@ -345,6 +343,8 @@ export const confirmPurchase = async (productId) => {
         const product = getProduct(productId);
         if (!product || state.currentUser.current_points < product.ecopoints_cost) { alert("You do not have enough points."); return; }
         
+        logActivity('purchase_attempt', { product_id: productId });
+
         const confirmBtn = document.getElementById('confirm-purchase-btn');
         confirmBtn.disabled = true; confirmBtn.textContent = 'Processing...';
         
@@ -357,52 +357,51 @@ export const confirmPurchase = async (productId) => {
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
-        logActivity('store', 'purchase_success', `Purchased ${product.name} for ${product.ecopoints_cost} pts`);
+        logActivity('purchase_success', { order_id: orderData.id, product: product.name });
         
         closePurchaseModal();
         await Promise.all([refreshUserData(), loadUserRewardsData()]);
         window.showPage('my-rewards');
-
     } catch (err) { 
         console.error('Purchase Failed:', err); 
+        logActivity('purchase_fail', { error: err.message });
         alert(`Purchase failed: ${err.message}`); 
-        logActivity('error', 'purchase_failed', err.message);
     }
 };
 
-// 6. My Rewards (Cache-then-Network)
+// 6. My Rewards (Cache-First)
 export const loadUserRewardsData = async () => {
     try {
-        const CACHE_KEY = `user_rewards_${state.currentUser.id}`;
-
-        // A. Fast Load: Cache
-        const cachedRewards = await cacheGet(CACHE_KEY);
+        // A. Cache First
+        const cachedRewards = await cacheGet('user_rewards');
         if (cachedRewards) {
-            state.userRewards = cachedRewards;
-            if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage(false);
+            processRewards(cachedRewards);
         }
 
-        // B. Network Load: Fresh Data
+        // B. Network
         const { data, error } = await supabase.from('orders').select(`id, created_at, status, order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )`).eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
         if (error) return;
 
-        const processedRewards = data.map(order => {
-            const item = order.order_items[0]; if (!item) return null;
-            return { userRewardId: order.id, purchaseDate: formatDate(order.created_at), status: order.status, productName: item.products.name, storeName: item.products.stores.name, productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() };
-        }).filter(Boolean);
+        // C. Update Cache & Render
+        await cacheSet('user_rewards', data);
+        processRewards(data);
 
-        state.userRewards = processedRewards;
-        await cacheSet(CACHE_KEY, processedRewards);
-
-        if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
     } catch (err) { console.error('User Rewards Load Error:', err); }
 };
 
-export const renderMyRewardsPage = (shouldLog = true) => {
-    els.allRewardsList.innerHTML = '';
+const processRewards = (data) => {
+    state.userRewards = data.map(order => {
+        const item = order.order_items[0]; if (!item) return null;
+        return { userRewardId: order.id, purchaseDate: formatDate(order.created_at), status: order.status, productName: item.products.name, storeName: item.products.stores.name, productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() };
+    }).filter(Boolean);
     
-    if (shouldLog) logActivity('page_view', 'my_rewards', 'Viewed Order History');
+    if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
+};
 
+export const renderMyRewardsPage = () => {
+    els.allRewardsList.innerHTML = '';
+    logActivity('view_my_rewards');
+    
     if (state.userRewards.length === 0) { 
         els.allRewardsList.innerHTML = `
             <div class="flex flex-col items-center justify-center py-12 opacity-60">
@@ -441,7 +440,7 @@ export const renderMyRewardsPage = (shouldLog = true) => {
             <div class="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 relative overflow-hidden group">
                 <div class="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/20 dark:to-gray-700/0 rounded-full z-0"></div>
                 <div class="relative z-10 flex gap-4">
-                    <div class="flex-shrink-0"><img src="${ur.productImage}" class="w-20 h-20 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shadow-sm" onerror="this.src='${getPlaceholderImage()}'"></div>
+                    <div class="flex-shrink-0"><img data-src="${ur.productImage}" src="${getPlaceholderImage('80x80', 'Loading')}" class="w-20 h-20 rounded-2xl object-cover border border-gray-100 dark:border-gray-700 shadow-sm lazy-img"></div>
                     <div class="flex-grow min-w-0">
                         <div class="flex justify-between items-start mb-1"><p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate pr-2">${ur.storeName}</p>${statusBadge}</div>
                         <h3 class="text-sm font-black text-gray-900 dark:text-white leading-tight mb-1 line-clamp-2">${ur.productName}</h3>
@@ -453,13 +452,17 @@ export const renderMyRewardsPage = (shouldLog = true) => {
             </div>
         `;
     });
+    
+    setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 };
 
 export const openRewardQrModal = (userRewardId) => {
-    logActivity('ui_interaction', 'view_qr', `Viewed QR for Order: ${userRewardId}`);
     const ur = state.userRewards.find(r => r.userRewardId === userRewardId);
     if (!ur) return;
+    
+    logActivity('view_reward_qr', { order_id: userRewardId });
+
     const qrValue = `ecocampus-order:${userRewardId}-user:${state.currentUser.id}`;
     els.qrModal.innerHTML = `
         <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">Reward QR</h3><button onclick="closeQrModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div><p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${ur.storeName}</strong> to redeem <strong>${ur.productName}</strong>.</p><div class="flex justify-center mb-4"><img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrValue)}" class="rounded-lg border"></div><button onclick="closeQrModal()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg">Close</button>`;
@@ -478,7 +481,7 @@ export const renderEcoPointsPage = () => {
     const u = state.currentUser;
     if (!u) return;
     
-    logActivity('page_view', 'ecopoints', 'Viewed EcoPoints Balance');
+    logActivity('view_ecopoints_page');
 
     const balanceEl = document.getElementById('ecopoints-balance');
     if(balanceEl) balanceEl.textContent = u.current_points;
