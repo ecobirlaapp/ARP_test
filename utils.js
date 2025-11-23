@@ -1,3 +1,4 @@
+import { supabase } from './supabase-client.js';
 import { CLOUDINARY_API_URL, CLOUDINARY_UPLOAD_PRESET, TICK_IMAGES, state } from './state.js';
 import { renderDashboard } from './dashboard.js';
 import { renderRewards, renderMyRewardsPage } from './store.js';
@@ -7,79 +8,52 @@ import { renderChallengesPage } from './challenges.js';
 import { renderEventsPage } from './events.js'; 
 import { renderProfile } from './dashboard.js';
 import { showLeaderboardTab } from './social.js';
-import { supabase } from './supabase-client.js';
 
-// ==========================================
-// 🚀 PERFORMANCE & OFFLINE UTILS
-// ==========================================
+// --- PERFORMANCE & DATA UTILS ---
 
-// 1. Caching Engine (localForage)
-export const cacheGet = async (key) => {
-    try {
-        return await localforage.getItem(key);
-    } catch (err) {
-        console.warn('Cache Read Error:', err);
-        return null;
-    }
+export const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 };
 
-export const cacheSet = async (key, value) => {
-    try {
-        await localforage.setItem(key, value);
-    } catch (err) {
-        console.warn('Cache Write Error:', err);
-    }
-};
-
-// 2. Low-Data Mode Detection
 export const isLowDataMode = () => {
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    return connection ? connection.saveData : false;
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn) {
+        return (conn.saveData === true || ['slow-2g', '2g', '3g'].includes(conn.effectiveType));
+    }
+    return false;
 };
 
-// 3. Lazy Loading Images (Intersection Observer)
-export const setupLazyImages = () => {
-    const images = document.querySelectorAll('.lazy-img');
-    const observer = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                const src = img.getAttribute('data-src');
-                if (src) {
-                    img.src = src;
-                    img.classList.add('loaded');
-                }
-                observer.unobserve(img);
-            }
-        });
-    });
-    images.forEach(img => observer.observe(img));
-};
+// --- LOGGING UTILS ---
 
-// 4. Centralized Activity Logger
-export const logActivity = async (actionType, details = {}) => {
-    if (!state.currentUser) return; // Don't log if not logged in
-    
-    // Silence errors to not disrupt user flow
+export const logUserActivity = async (actionType, description, metadata = {}) => {
+    // Fail silently to avoid interrupting UX
     try {
-        await supabase.from('user_activity_log').insert({
+        if (!state.currentUser) return;
+        
+        // Don't await this, let it run in background
+        supabase.from('user_activity_log').insert({
             user_id: state.currentUser.id,
             action_type: actionType,
-            metadata: details, // Stores JSON details
-            created_at: new Date().toISOString()
+            description: description,
+            metadata: metadata
+        }).then(({ error }) => {
+            if (error) console.warn("Activity log failed:", error.message);
         });
+
     } catch (err) {
-        // Just console warn, don't alert user
-        console.warn('Log Activity Failed:', err); 
+        // Ignore logging errors
     }
 };
 
-
-// ==========================================
-// 🎨 UI & DOM UTILS
-// ==========================================
-
-// DOM Cache
+// --- DOM CACHE ---
 export const els = {
     get pages() { return document.querySelectorAll('.page'); },
     get sidebar() { return document.getElementById('sidebar'); },
@@ -107,12 +81,20 @@ export const els = {
     get qrModal() { return document.getElementById('qr-modal'); }
 };
 
-export const getPlaceholderImage = (size = '400x300', text = 'EcoCampus') => `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
+export const getPlaceholderImage = (size = '400x300', text = 'EcoCampus') => {
+    // Optimization: Request smaller images on low data
+    if (isLowDataMode()) {
+        const dims = size.split('x').map(n => Math.floor(parseInt(n)/2)).join('x');
+        return `https://placehold.co/${dims}/EBFBEE/166534?text=${text}&font=inter`;
+    }
+    return `https://placehold.co/${size}/EBFBEE/166534?text=${text}&font=inter`;
+};
 
 export const getTickImg = (tickType) => {
     if (!tickType) return '';
+    // Optimization: Don't load high-res ticks on low data if possible (using same URL for now, but logic is ready)
     const url = TICK_IMAGES[tickType.toLowerCase()];
-    return url ? `<img src="${url}" class="tick-icon" alt="${tickType} tick">` : '';
+    return url ? `<img src="${url}" class="tick-icon" alt="${tickType} tick" loading="lazy">` : '';
 };
 
 export const getUserLevel = (points) => {
@@ -135,20 +117,17 @@ export const getUserLevel = (points) => {
     return { ...current, progress, progressText };
 };
 
-// --- NEW: IST DATE LOGIC ---
+// --- IST DATE LOGIC ---
 
-// 1. Get Today's Date string (YYYY-MM-DD) specifically for IST
 export const getTodayIST = () => {
-    // 'en-CA' format is always YYYY-MM-DD
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 };
 
-// 2. Format any date string to show in IST
 export const formatDate = (dateString, options = {}) => {
     if (!dateString) return '...';
     const defaultOptions = { 
         year: 'numeric', month: 'short', day: 'numeric',
-        timeZone: 'Asia/Kolkata' // FORCE IST
+        timeZone: 'Asia/Kolkata' 
     };
     const finalOptions = { ...defaultOptions, ...options };
     return new Date(dateString).toLocaleDateString('en-IN', finalOptions);
@@ -176,15 +155,28 @@ export const uploadToCloudinary = async (file) => {
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     
+    // Low Data Optimization: Could add logic here to resize client-side before upload
+    // For now, we proceed as normal but log the attempt
+    
     try {
+        logUserActivity('upload_start', 'User starting image upload');
         const res = await fetch(CLOUDINARY_API_URL, { method: 'POST', body: formData });
         const data = await res.json();
         if (data.error) throw new Error(data.error.message);
+        
+        logUserActivity('upload_success', 'Image uploaded successfully');
         return data.secure_url;
-    } catch (err) { console.error("Cloudinary Upload Error:", err); throw err; }
+    } catch (err) { 
+        console.error("Cloudinary Upload Error:", err); 
+        logUserActivity('upload_error', err.message);
+        throw err; 
+    }
 };
 
 export const showPage = (pageId, addToHistory = true) => {
+    // 1. Log Activity
+    logUserActivity('view_page', `Mapsd to ${pageId}`);
+
     els.pages.forEach(p => p.classList.remove('active'));
     
     const targetPage = document.getElementById(pageId);
@@ -205,22 +197,52 @@ export const showPage = (pageId, addToHistory = true) => {
     if (addToHistory) {
         window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
     }
+
+    // Logic Routing
+    if (pageId === 'dashboard') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        renderDashboard(); 
+    } 
+    else if (pageId === 'leaderboard') { 
+        showLeaderboardTab('student'); 
+    } 
+    else if (pageId === 'rewards') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        window.renderRewardsWrapper && window.renderRewardsWrapper(); 
+    } 
+    else if (pageId === 'my-rewards') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        window.renderMyRewardsPageWrapper && window.renderMyRewardsPageWrapper(); 
+    } 
+    else if (pageId === 'history') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        renderHistory(); 
+    } 
+    else if (pageId === 'ecopoints') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        window.renderEcoPointsPageWrapper && window.renderEcoPointsPageWrapper(); 
+    } 
+    else if (pageId === 'challenges') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        window.renderChallengesPageWrapper && window.renderChallengesPageWrapper(); 
+    } 
+    else if (pageId === 'events') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        window.renderEventsPageWrapper && window.renderEventsPageWrapper(); 
+    } 
+    else if (pageId === 'profile') { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+        renderProfile(); 
+    }
+    else { 
+        if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); 
+    }
+
+    // Responsive Logic: Only close sidebar on mobile
+    if (window.innerWidth < 1024) {
+        toggleSidebar(true); 
+    }
     
-    // Log Page Navigation (Debounced implicitly by user speed)
-    // We log specific page loads inside their render functions for better context
-
-    if (pageId === 'dashboard') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderDashboard(); } 
-    else if (pageId === 'leaderboard') { showLeaderboardTab('student'); } 
-    else if (pageId === 'rewards') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderRewardsWrapper && window.renderRewardsWrapper(); } 
-    else if (pageId === 'my-rewards') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderMyRewardsPageWrapper && window.renderMyRewardsPageWrapper(); } 
-    else if (pageId === 'history') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderHistory(); } 
-    else if (pageId === 'ecopoints') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderEcoPointsPageWrapper && window.renderEcoPointsPageWrapper(); } 
-    else if (pageId === 'challenges') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderChallengesPageWrapper && window.renderChallengesPageWrapper(); } 
-    else if (pageId === 'events') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); window.renderEventsPageWrapper && window.renderEventsPageWrapper(); } 
-    else if (pageId === 'profile') { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); renderProfile(); }
-    else { if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); }
-
-    toggleSidebar(true); 
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -233,6 +255,10 @@ window.addEventListener('popstate', (event) => {
 });
 
 export const toggleSidebar = (forceClose = false) => {
+    // Desktop: Sidebar should mostly stay open unless explicitly toggled, 
+    // but typically we don't use 'overlay' on desktop. 
+    // This function mainly handles mobile overlay toggling.
+    
     if (forceClose) {
         els.sidebar.classList.add('-translate-x-full');
         els.sidebarOverlay.classList.add('opacity-0');
@@ -241,9 +267,12 @@ export const toggleSidebar = (forceClose = false) => {
         els.sidebar.classList.toggle('-translate-x-full');
         els.sidebarOverlay.classList.toggle('hidden');
         els.sidebarOverlay.classList.toggle('opacity-0');
+        
+        // Log menu interaction
+        const isOpening = !els.sidebar.classList.contains('-translate-x-full');
+        if (isOpening) logUserActivity('ui_interaction', 'Opened Sidebar');
     }
 };
 
 window.showPage = showPage;
 window.toggleSidebar = toggleSidebar;
-window.setupLazyImagesWrapper = setupLazyImages;
