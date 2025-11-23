@@ -1,19 +1,13 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage, getTickImg, getUserInitials, cacheGet, cacheSet, logActivity } from './utils.js';
+import { els, getPlaceholderImage, getTickImg, getUserInitials, logUserActivity } from './utils.js';
 
 let currentLeaderboardTab = 'student';
 
 export const loadLeaderboardData = async () => {
     try {
-        // 1. Try Cache First
-        const cachedData = await cacheGet('leaderboard_raw_data');
-        if (cachedData) {
-            processLeaderboardData(cachedData);
-        }
-
-        // 2. Fetch Fresh Data from Network
-        // We join 'user_streaks' to get the current streak
+        // 1. Fetch Users + Streak Data
+        // Optimization: Select only necessary fields to reduce payload size
         const { data, error } = await supabase
             .from('users')
             .select(`
@@ -24,87 +18,76 @@ export const loadLeaderboardData = async () => {
 
         if (error) throw error;
 
-        // 3. Update Cache & Render Fresh Data
-        await cacheSet('leaderboard_raw_data', data);
-        processLeaderboardData(data);
+        // 2. Process Student Leaderboard
+        state.leaderboard = data.slice(0, 20).map(u => ({
+            ...u,
+            name: u.full_name,
+            initials: getUserInitials(u.full_name),
+            isCurrentUser: u.id === state.currentUser.id,
+            // Access streak safely
+            streak: (u.user_streaks && u.user_streaks.current_streak) 
+                ? u.user_streaks.current_streak 
+                : (Array.isArray(u.user_streaks) && u.user_streaks[0] ? u.user_streaks[0].current_streak : 0)
+        }));
 
-    } catch (err) { 
-        console.error('Leaderboard Data Error:', err); 
-    }
-};
-
-const processLeaderboardData = (data) => {
-    if (!data) return;
-
-    // A. Process Student Leaderboard
-    state.leaderboard = data.slice(0, 20).map(u => ({
-        ...u,
-        name: u.full_name,
-        initials: getUserInitials(u.full_name),
-        isCurrentUser: u.id === state.currentUser.id,
-        // Access streak safely
-        streak: (u.user_streaks && u.user_streaks.current_streak) 
-            ? u.user_streaks.current_streak 
-            : (Array.isArray(u.user_streaks) && u.user_streaks[0] ? u.user_streaks[0].current_streak : 0)
-    }));
-
-    // B. Process Department Leaderboard
-    const deptMap = {};
-    
-    data.forEach(user => {
-        // Cleaning Logic
-        let cleanCourse = user.course ? user.course.trim().toUpperCase() : 'GENERAL';
-        cleanCourse = cleanCourse.replace(/^(FY|SY|TY)[\s.]?/i, '');
-        if (cleanCourse.length < 2) cleanCourse = user.course;
-
-        if (!deptMap[cleanCourse]) {
-            deptMap[cleanCourse] = { 
-                name: cleanCourse, 
-                totalPoints: 0, 
-                studentCount: 0, 
-                students: [] 
-            };
-        }
-
-        deptMap[cleanCourse].totalPoints += (user.lifetime_points || 0);
-        deptMap[cleanCourse].studentCount += 1;
+        // 3. Process Department Leaderboard
+        const deptMap = {};
         
-        const streakVal = (user.user_streaks && user.user_streaks.current_streak) 
-            ? user.user_streaks.current_streak 
-            : (Array.isArray(user.user_streaks) && user.user_streaks[0] ? user.user_streaks[0].current_streak : 0);
+        data.forEach(user => {
+            // Course Name Cleaning Logic
+            let cleanCourse = user.course ? user.course.trim().toUpperCase() : 'GENERAL';
+            cleanCourse = cleanCourse.replace(/^(FY|SY|TY)[\s.]?/i, '');
+            if (cleanCourse.length < 2) cleanCourse = user.course;
 
-        deptMap[cleanCourse].students.push({
-            name: user.full_name,
-            points: user.lifetime_points,
-            img: user.profile_img_url,
-            tick_type: user.tick_type,
-            initials: getUserInitials(user.full_name),
-            streak: streakVal
+            if (!deptMap[cleanCourse]) {
+                deptMap[cleanCourse] = { 
+                    name: cleanCourse, 
+                    totalPoints: 0, 
+                    studentCount: 0, 
+                    students: [] 
+                };
+            }
+
+            deptMap[cleanCourse].totalPoints += (user.lifetime_points || 0);
+            deptMap[cleanCourse].studentCount += 1;
+            
+            const streakVal = (user.user_streaks && user.user_streaks.current_streak) 
+                ? user.user_streaks.current_streak 
+                : (Array.isArray(user.user_streaks) && user.user_streaks[0] ? user.user_streaks[0].current_streak : 0);
+
+            deptMap[cleanCourse].students.push({
+                name: user.full_name,
+                points: user.lifetime_points,
+                img: user.profile_img_url,
+                tick_type: user.tick_type,
+                initials: getUserInitials(user.full_name),
+                streak: streakVal
+            });
         });
-    });
 
-    // Calculate Average & Sort
-    state.departmentLeaderboard = Object.values(deptMap).map(dept => ({
-        ...dept,
-        averageScore: dept.studentCount > 0 ? Math.round(dept.totalPoints / dept.studentCount) : 0
-    })).sort((a, b) => b.averageScore - a.averageScore); // Sort by Avg Score
-    
-    // Render if active
-    if (document.getElementById('leaderboard').classList.contains('active')) {
-        if (currentLeaderboardTab === 'student') renderStudentLeaderboard();
-        else renderDepartmentLeaderboard();
-    }
+        // Calculate Average & Sort
+        state.departmentLeaderboard = Object.values(deptMap).map(dept => ({
+            ...dept,
+            averageScore: dept.studentCount > 0 ? Math.round(dept.totalPoints / dept.studentCount) : 0
+        })).sort((a, b) => b.averageScore - a.averageScore); // Sort by Avg Score
+        
+        // Render if active
+        if (document.getElementById('leaderboard').classList.contains('active')) {
+            if (currentLeaderboardTab === 'student') renderStudentLeaderboard();
+            else renderDepartmentLeaderboard();
+        }
+    } catch (err) { console.error('Leaderboard Data Error:', err); }
 };
 
 export const showLeaderboardTab = (tab) => {
     currentLeaderboardTab = tab;
-    
-    logActivity('switch_leaderboard_tab', { tab: tab });
-
     const btnStudent = document.getElementById('leaderboard-tab-student');
     const btnDept = document.getElementById('leaderboard-tab-dept');
     const contentStudent = document.getElementById('leaderboard-content-student');
     const contentDept = document.getElementById('leaderboard-content-department');
+
+    // Log Interaction
+    logUserActivity('switch_tab', `Switched leaderboard to ${tab}`);
 
     if (tab === 'department') {
         btnDept.classList.add('active'); btnStudent.classList.remove('active');
@@ -129,7 +112,7 @@ export const renderDepartmentLeaderboard = () => {
 
     state.departmentLeaderboard.forEach((dept, index) => {
         container.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700" onclick="showDepartmentDetail('${dept.name}')">
+            <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700 active:scale-[0.98] transform duration-150" onclick="showDepartmentDetail('${dept.name}')">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center">
                         <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-green-200 dark:from-emerald-900/60 dark:to-green-900/60 flex items-center justify-center mr-4 text-sm font-bold text-emerald-800 dark:text-emerald-100 shadow-sm">#${index + 1}</span>
@@ -151,8 +134,9 @@ export const renderDepartmentLeaderboard = () => {
 export const showDepartmentDetail = (deptName) => {
     const deptData = state.departmentLeaderboard.find(d => d.name === deptName);
     if (!deptData) return;
-    
-    logActivity('view_department_detail', { department: deptName });
+
+    // Log Activity
+    logUserActivity('view_department', `Viewed details for ${deptName}`);
 
     // Sort students by points (High to Low)
     const sortedStudents = deptData.students.sort((a, b) => b.points - a.points);
@@ -185,20 +169,23 @@ export const showDepartmentDetail = (deptName) => {
             </div>
         `).join('');
 
+    // Responsive Container: Max width on desktop
     els.departmentDetailPage.innerHTML = `
-        <div class="sticky top-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md z-10 p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-            <div class="flex items-center">
-                <button onclick="showPage('leaderboard')" class="mr-3 p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                    <i data-lucide="arrow-left" class="w-5 h-5 text-gray-700 dark:text-gray-200"></i>
-                </button>
-                <div>
-                    <h2 class="text-xl font-extrabold text-gray-900 dark:text-gray-100">${deptName}</h2>
-                    <p class="text-xs text-gray-500 font-medium">Avg Score: <span class="text-green-600 font-bold">${deptData.averageScore}</span></p>
+        <div class="max-w-3xl mx-auto h-full flex flex-col">
+            <div class="sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md z-10 p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+                <div class="flex items-center">
+                    <button onclick="showPage('leaderboard')" class="mr-3 p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                        <i data-lucide="arrow-left" class="w-5 h-5 text-gray-700 dark:text-gray-200"></i>
+                    </button>
+                    <div>
+                        <h2 class="text-xl font-extrabold text-gray-900 dark:text-gray-100">${deptName}</h2>
+                        <p class="text-xs text-gray-500 font-medium">Avg Score: <span class="text-green-600 font-bold">${deptData.averageScore}</span></p>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="p-4 space-y-3 pb-20">
-            ${studentsHTML}
+            <div class="p-4 space-y-3 pb-20 overflow-y-auto">
+                ${studentsHTML}
+            </div>
         </div>`;
 
     window.showPage('department-detail-page');
@@ -214,9 +201,10 @@ export const renderStudentLeaderboard = () => {
     // Podium Renderer
     const renderChamp = (u, rank) => {
         if (!u) return '';
+        const img = u.profile_img_url || getPlaceholderImage('100x100', u.initials);
         return `
             <div class="badge ${rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze'}">
-                ${u.profile_img_url ? `<img src="${u.profile_img_url}" class="w-full h-full object-cover" loading="lazy">` : u.initials}
+                <img src="${img}" class="w-full h-full object-cover" loading="lazy">
             </div>
             <div class="champ-name">${u.name} ${getTickImg(u.tick_type)}</div>
             <div class="champ-points">${u.lifetime_points} pts</div>
@@ -233,11 +221,12 @@ export const renderStudentLeaderboard = () => {
 
     els.lbList.innerHTML = '';
     rest.forEach((user, index) => {
+        const img = user.profile_img_url || getPlaceholderImage('40x40', user.initials);
         els.lbList.innerHTML += `
             <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
                 <div class="user">
                     <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
-                    <div class="circle">${user.profile_img_url ? `<img src="${user.profile_img_url}" class="w-full h-full object-cover" loading="lazy">` : user.initials}</div>
+                    <div class="circle"><img src="${img}" class="w-full h-full object-cover" loading="lazy"></div>
                     <div class="user-info">
                         <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''} ${getTickImg(user.tick_type)}</strong>
                         <span class="sub-class">${user.course}</span>
