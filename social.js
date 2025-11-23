@@ -6,22 +6,13 @@ let currentLeaderboardTab = 'student';
 
 export const loadLeaderboardData = async () => {
     try {
-        const CACHE_KEY = 'leaderboard_data';
-
-        // 1. Fast Load: Cache
-        const cachedData = await cacheGet(CACHE_KEY);
+        // 1. Try Cache First
+        const cachedData = await cacheGet('leaderboard_raw_data');
         if (cachedData) {
-            state.leaderboard = cachedData.leaderboard;
-            state.departmentLeaderboard = cachedData.departmentLeaderboard;
-            
-            // Render immediately if on leaderboard page
-            if (document.getElementById('leaderboard').classList.contains('active')) {
-                if (currentLeaderboardTab === 'student') renderStudentLeaderboard();
-                else renderDepartmentLeaderboard();
-            }
+            processLeaderboardData(cachedData);
         }
 
-        // 2. Network Load: Fresh Data
+        // 2. Fetch Fresh Data from Network
         // We join 'user_streaks' to get the current streak
         const { data, error } = await supabase
             .from('users')
@@ -33,85 +24,87 @@ export const loadLeaderboardData = async () => {
 
         if (error) throw error;
 
-        // 3. Process Student Leaderboard
-        const processedLeaderboard = data.slice(0, 20).map(u => ({
-            ...u,
-            name: u.full_name,
-            initials: getUserInitials(u.full_name),
-            isCurrentUser: u.id === state.currentUser.id,
-            // Access streak safely
-            streak: (u.user_streaks && u.user_streaks.current_streak) 
-                ? u.user_streaks.current_streak 
-                : (Array.isArray(u.user_streaks) && u.user_streaks[0] ? u.user_streaks[0].current_streak : 0)
-        }));
+        // 3. Update Cache & Render Fresh Data
+        await cacheSet('leaderboard_raw_data', data);
+        processLeaderboardData(data);
 
-        // 4. Process Department Leaderboard
-        const deptMap = {};
-        
-        data.forEach(user => {
-            // Course Name Cleaning Logic
-            let cleanCourse = user.course ? user.course.trim().toUpperCase() : 'GENERAL';
-            cleanCourse = cleanCourse.replace(/^(FY|SY|TY)[\s.]?/i, ''); // Remove Year prefix
-            if (cleanCourse.length < 2) cleanCourse = user.course; // Revert if too short
+    } catch (err) { 
+        console.error('Leaderboard Data Error:', err); 
+    }
+};
 
-            if (!deptMap[cleanCourse]) {
-                deptMap[cleanCourse] = { 
-                    name: cleanCourse, 
-                    totalPoints: 0, 
-                    studentCount: 0, 
-                    students: [] 
-                };
-            }
+const processLeaderboardData = (data) => {
+    if (!data) return;
 
-            deptMap[cleanCourse].totalPoints += (user.lifetime_points || 0);
-            deptMap[cleanCourse].studentCount += 1;
-            
-            // Handle streak safely
-            const streakVal = (user.user_streaks && user.user_streaks.current_streak) 
-                ? user.user_streaks.current_streak 
-                : (Array.isArray(user.user_streaks) && user.user_streaks[0] ? user.user_streaks[0].current_streak : 0);
+    // A. Process Student Leaderboard
+    state.leaderboard = data.slice(0, 20).map(u => ({
+        ...u,
+        name: u.full_name,
+        initials: getUserInitials(u.full_name),
+        isCurrentUser: u.id === state.currentUser.id,
+        // Access streak safely
+        streak: (u.user_streaks && u.user_streaks.current_streak) 
+            ? u.user_streaks.current_streak 
+            : (Array.isArray(u.user_streaks) && u.user_streaks[0] ? u.user_streaks[0].current_streak : 0)
+    }));
 
-            deptMap[cleanCourse].students.push({
-                name: user.full_name,
-                points: user.lifetime_points,
-                img: user.profile_img_url,
-                tick_type: user.tick_type,
-                initials: getUserInitials(user.full_name),
-                streak: streakVal
-            });
-        });
+    // B. Process Department Leaderboard
+    const deptMap = {};
+    
+    data.forEach(user => {
+        // Cleaning Logic
+        let cleanCourse = user.course ? user.course.trim().toUpperCase() : 'GENERAL';
+        cleanCourse = cleanCourse.replace(/^(FY|SY|TY)[\s.]?/i, '');
+        if (cleanCourse.length < 2) cleanCourse = user.course;
 
-        // Calculate Average & Sort
-        const processedDeptLeaderboard = Object.values(deptMap).map(dept => ({
-            ...dept,
-            averageScore: dept.studentCount > 0 ? Math.round(dept.totalPoints / dept.studentCount) : 0
-        })).sort((a, b) => b.averageScore - a.averageScore);
-        
-        // 5. Update State & Cache
-        state.leaderboard = processedLeaderboard;
-        state.departmentLeaderboard = processedDeptLeaderboard;
-        
-        await cacheSet(CACHE_KEY, {
-            leaderboard: processedLeaderboard,
-            departmentLeaderboard: processedDeptLeaderboard
-        });
-
-        // 6. Re-render
-        if (document.getElementById('leaderboard').classList.contains('active')) {
-            if (currentLeaderboardTab === 'student') renderStudentLeaderboard();
-            else renderDepartmentLeaderboard();
+        if (!deptMap[cleanCourse]) {
+            deptMap[cleanCourse] = { 
+                name: cleanCourse, 
+                totalPoints: 0, 
+                studentCount: 0, 
+                students: [] 
+            };
         }
-    } catch (err) { console.error('Leaderboard Data Error:', err); }
+
+        deptMap[cleanCourse].totalPoints += (user.lifetime_points || 0);
+        deptMap[cleanCourse].studentCount += 1;
+        
+        const streakVal = (user.user_streaks && user.user_streaks.current_streak) 
+            ? user.user_streaks.current_streak 
+            : (Array.isArray(user.user_streaks) && user.user_streaks[0] ? user.user_streaks[0].current_streak : 0);
+
+        deptMap[cleanCourse].students.push({
+            name: user.full_name,
+            points: user.lifetime_points,
+            img: user.profile_img_url,
+            tick_type: user.tick_type,
+            initials: getUserInitials(user.full_name),
+            streak: streakVal
+        });
+    });
+
+    // Calculate Average & Sort
+    state.departmentLeaderboard = Object.values(deptMap).map(dept => ({
+        ...dept,
+        averageScore: dept.studentCount > 0 ? Math.round(dept.totalPoints / dept.studentCount) : 0
+    })).sort((a, b) => b.averageScore - a.averageScore); // Sort by Avg Score
+    
+    // Render if active
+    if (document.getElementById('leaderboard').classList.contains('active')) {
+        if (currentLeaderboardTab === 'student') renderStudentLeaderboard();
+        else renderDepartmentLeaderboard();
+    }
 };
 
 export const showLeaderboardTab = (tab) => {
     currentLeaderboardTab = tab;
+    
+    logActivity('switch_leaderboard_tab', { tab: tab });
+
     const btnStudent = document.getElementById('leaderboard-tab-student');
     const btnDept = document.getElementById('leaderboard-tab-dept');
     const contentStudent = document.getElementById('leaderboard-content-student');
     const contentDept = document.getElementById('leaderboard-content-department');
-
-    logActivity('ui_interaction', 'tab_switch', `Switched to ${tab} leaderboard`);
 
     if (tab === 'department') {
         btnDept.classList.add('active'); btnStudent.classList.remove('active');
@@ -136,7 +129,7 @@ export const renderDepartmentLeaderboard = () => {
 
     state.departmentLeaderboard.forEach((dept, index) => {
         container.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700 active:scale-98" onclick="showDepartmentDetail('${dept.name}')">
+            <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700" onclick="showDepartmentDetail('${dept.name}')">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center">
                         <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-green-200 dark:from-emerald-900/60 dark:to-green-900/60 flex items-center justify-center mr-4 text-sm font-bold text-emerald-800 dark:text-emerald-100 shadow-sm">#${index + 1}</span>
@@ -156,9 +149,10 @@ export const renderDepartmentLeaderboard = () => {
 };
 
 export const showDepartmentDetail = (deptName) => {
-    logActivity('page_view', 'dept_detail', `Viewed ${deptName} Leaderboard`);
     const deptData = state.departmentLeaderboard.find(d => d.name === deptName);
     if (!deptData) return;
+    
+    logActivity('view_department_detail', { department: deptName });
 
     // Sort students by points (High to Low)
     const sortedStudents = deptData.students.sort((a, b) => b.points - a.points);
@@ -169,7 +163,7 @@ export const showDepartmentDetail = (deptName) => {
             <div class="glass-card p-3 rounded-2xl flex items-center justify-between border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 <div class="flex items-center gap-4">
                     <div class="relative">
-                        <img src="${s.img || getPlaceholderImage('60x60', s.initials)}" class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm">
+                        <img src="${s.img || getPlaceholderImage('60x60', s.initials)}" class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm" loading="lazy">
                         <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center text-[10px] font-bold text-gray-600 dark:text-gray-300 border border-white dark:border-gray-600">
                             ${idx + 1}
                         </div>
@@ -194,7 +188,7 @@ export const showDepartmentDetail = (deptName) => {
     els.departmentDetailPage.innerHTML = `
         <div class="sticky top-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md z-10 p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
             <div class="flex items-center">
-                <button onclick="showPage('leaderboard')" class="mr-3 p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors active:scale-95">
+                <button onclick="showPage('leaderboard')" class="mr-3 p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <i data-lucide="arrow-left" class="w-5 h-5 text-gray-700 dark:text-gray-200"></i>
                 </button>
                 <div>
@@ -222,7 +216,7 @@ export const renderStudentLeaderboard = () => {
         if (!u) return '';
         return `
             <div class="badge ${rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze'}">
-                ${u.profile_img_url ? `<img src="${u.profile_img_url}" class="w-full h-full object-cover">` : u.initials}
+                ${u.profile_img_url ? `<img src="${u.profile_img_url}" class="w-full h-full object-cover" loading="lazy">` : u.initials}
             </div>
             <div class="champ-name">${u.name} ${getTickImg(u.tick_type)}</div>
             <div class="champ-points">${u.lifetime_points} pts</div>
@@ -230,33 +224,28 @@ export const renderStudentLeaderboard = () => {
         `;
     }
 
-    // Prevent error if podium is missing in DOM
-    if (els.lbPodium) {
-        els.lbPodium.innerHTML = `
-            <div class="podium">
-                <div class="champ">${renderChamp(rank2, 2)}</div>
-                <div class="champ">${renderChamp(rank1, 1)}</div>
-                <div class="champ">${renderChamp(rank3, 3)}</div>
-            </div>`;
-    }
+    els.lbPodium.innerHTML = `
+        <div class="podium">
+            <div class="champ">${renderChamp(rank2, 2)}</div>
+            <div class="champ">${renderChamp(rank1, 1)}</div>
+            <div class="champ">${renderChamp(rank3, 3)}</div>
+        </div>`;
 
-    if (els.lbList) {
-        els.lbList.innerHTML = '';
-        rest.forEach((user, index) => {
-            els.lbList.innerHTML += `
-                <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
-                    <div class="user">
-                        <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
-                        <div class="circle">${user.profile_img_url ? `<img src="${user.profile_img_url}" class="w-full h-full object-cover">` : user.initials}</div>
-                        <div class="user-info">
-                            <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''} ${getTickImg(user.tick_type)}</strong>
-                            <span class="sub-class">${user.course}</span>
-                        </div>
+    els.lbList.innerHTML = '';
+    rest.forEach((user, index) => {
+        els.lbList.innerHTML += `
+            <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
+                <div class="user">
+                    <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
+                    <div class="circle">${user.profile_img_url ? `<img src="${user.profile_img_url}" class="w-full h-full object-cover" loading="lazy">` : user.initials}</div>
+                    <div class="user-info">
+                        <strong>${user.name} ${user.isCurrentUser ? '(You)' : ''} ${getTickImg(user.tick_type)}</strong>
+                        <span class="sub-class">${user.course}</span>
                     </div>
-                    <div class="points-display">${user.lifetime_points} pts</div>
-                </div>`;
-        });
-    }
+                </div>
+                <div class="points-display">${user.lifetime_points} pts</div>
+            </div>`;
+    });
 };
 
 window.showLeaderboardTab = showLeaderboardTab;
