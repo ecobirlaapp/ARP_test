@@ -61,88 +61,91 @@ export const renderRewards = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 3. Render Product Detail (Full Height Image + Dark Mode Info Layout)
+// 3. Render Product Detail (Full Height Image + Specific Info Layout)
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
 
-    // Image & Data Setup
+    // Data Setup
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage();
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
-    const highlights = product.highlights.length > 0 ? product.highlights : ['Verified Quality', 'Authentic Product', 'Student Favorite'];
-    const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'Type', spec_value: 'Standard' }, { spec_key: 'Availability', spec_value: 'In Stock' }];
+    const highlights = product.highlights.length > 0 ? product.highlights : ['Handwritten-style love letter', 'Burnt-edge design for vintage look', 'Personalized message', 'Ideal for birthdays/anniversaries'];
+    const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'FINISH', spec_value: 'Matte handcrafted' }, { spec_key: 'PRODUCT_TYPE', spec_value: 'Handcrafted Vintage Letter' }];
 
-    // Render
+    // Render HTML
     els.productDetailPage.innerHTML = `
-        <div class="relative w-full h-full bg-[#0d1117] overflow-y-auto no-scrollbar pb-28">
+        <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
             
             <div class="relative w-full h-[60vh] flex-shrink-0">
                 <img src="${imageUrl}" class="w-full h-full object-cover" onerror="this.src='${getPlaceholderImage()}'">
                 
-                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/60 transition-all z-20">
+                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
                     <i data-lucide="arrow-left" class="w-6 h-6"></i>
                 </button>
 
-                <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#0d1117] to-transparent"></div>
+                <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent"></div>
             </div>
 
-            <div class="relative px-5 -mt-6 z-10">
+            <div class="relative px-6 -mt-10 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh]">
                 
+                <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50"></div>
+
                 <div class="mb-6">
-                    <h1 class="text-2xl font-bold text-white mb-2 leading-tight">${product.name}</h1>
-                    <p class="text-gray-400 text-sm leading-relaxed">
-                        ${product.description || 'No description available for this item.'}
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
+                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                        ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
                     </p>
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="text-base font-bold text-white mb-4">Highlights</h3>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
                     <div class="space-y-3">
                         ${highlights.map(h => `
-                            <div class="flex items-start p-3 bg-[#11221c] rounded-2xl border border-[#1e4e38]">
+                            <div class="flex items-start p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
                                 <div class="flex-shrink-0 mt-0.5">
-                                    <div class="w-5 h-5 rounded-full bg-[#00a86b] flex items-center justify-center">
-                                        <i data-lucide="check" class="w-3 h-3 text-white"></i>
+                                    <div class="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center">
+                                        <i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i>
                                     </div>
                                 </div>
-                                <span class="ml-3 text-sm font-medium text-gray-200 leading-snug">${h}</span>
+                                <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
                             </div>
                         `).join('')}
                     </div>
                 </div>
 
                 <div class="mb-8">
-                    <h3 class="text-base font-bold text-white mb-4">Specifications</h3>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
                     <div class="grid grid-cols-2 gap-3">
                         ${specs.map(s => `
-                            <div class="bg-[#161b22] p-4 rounded-xl border border-gray-800">
-                                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">${s.spec_key}</p>
-                                <p class="text-sm font-bold text-white line-clamp-1">${s.spec_value}</p>
+                            <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-2">${s.spec_value}</p>
                             </div>
                         `).join('')}
                     </div>
                 </div>
 
-                <div class="mb-4 p-5 bg-[#14142b] rounded-2xl border border-[#2d2d55]">
+                <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
                     <div class="flex items-center gap-2 mb-2">
-                        <i data-lucide="qr-code" class="w-5 h-5 text-indigo-400"></i>
-                        <h3 class="text-sm font-bold text-white">How to Redeem</h3>
+                        <i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
+                        <h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3>
                     </div>
-                    <p class="text-xs text-indigo-200 leading-relaxed">
+                    <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
                         Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.
                     </p>
                 </div>
             </div>
 
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-[#0d1117] border-t border-gray-800 z-50 max-w-[420px] mx-auto flex items-center justify-between pb-6">
+            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 max-w-[420px] mx-auto flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
                 
                 <div>
-                    <p class="text-xs text-gray-500 line-through mb-0.5">₹${product.original_price}</p>
-                    <div class="flex items-center gap-2">
-                        <span class="text-2xl font-black text-white">₹${product.discounted_price}</span>
-                        <span class="text-gray-500 text-sm">+</span>
-                        <div class="flex items-center text-[#00d685] font-bold text-lg">
-                            <i data-lucide="leaf" class="w-4 h-4 mr-1 fill-current"></i>
+                    <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-3xl font-black text-gray-900 dark:text-white">₹${product.discounted_price}</span>
+                        <span class="text-gray-400 text-sm font-medium">+</span>
+                        <div class="flex items-center text-[#00d685] font-bold text-xl">
+                            <i data-lucide="leaf" class="w-5 h-5 mr-1 fill-current"></i>
                             <span>${product.ecopoints_cost}</span>
                         </div>
                     </div>
@@ -150,7 +153,7 @@ export const showProductDetailPage = (productId) => {
                 
                 <button onclick="openPurchaseModal('${product.id}')" 
                     ${canAfford ? '' : 'disabled'}
-                    class="bg-white text-black hover:bg-gray-200 font-bold py-3 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-black dark:hover:bg-gray-200 font-bold py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
                     <span>${canAfford ? 'Redeem Now' : 'Low Points'}</span>
                     <i data-lucide="chevron-right" class="w-5 h-5"></i>
                 </button>
@@ -163,7 +166,7 @@ export const showProductDetailPage = (productId) => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 4. Purchase Logic
+// 4. Purchase Modal Logic
 export const openPurchaseModal = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -306,7 +309,7 @@ export const closeQrModal = () => {
     setTimeout(() => els.qrModalOverlay.classList.add('hidden'), 300);
 };
 
-// 6. ECO POINTS LOGIC (Included for completeness based on previous steps)
+// 6. ECO POINTS LOGIC (Included for completeness)
 export const renderEcoPointsPage = () => {
     const u = state.currentUser;
     if (!u) return;
