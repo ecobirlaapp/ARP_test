@@ -1,94 +1,45 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { loadDashboardData, renderDashboard } from './dashboard.js';
-import { loadStoreAndProductData, renderRewards } from './store.js';
-import { loadEventsData, renderEventsPage } from './events.js';
-import { loadChallengesData, renderChallengesPage } from './challenges.js';
-import { logActivity } from './utils.js';
+import { refreshUserData } from './app.js';
+import { renderDashboard } from './dashboard.js';
+import { loadLeaderboardData } from './social.js';
+import { loadEventsData } from './events.js';
 
-// FIX: Local debounce to avoid circular dependency with utils.js
-const debounce = (func, wait) => {
-    let timeout;
-    return function(...args) {
-        const context = this;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), wait);
-    };
-};
+let debounceTimer = null;
 
-// Debounce refetch functions to prevent spamming if many updates happen at once
-const refreshDashboard = debounce(() => {
-    console.log('⚡ Realtime: Refreshing Dashboard');
-    loadDashboardData().then(() => renderDashboard());
-}, 2000);
-
-const refreshStore = debounce(() => {
-    console.log('⚡ Realtime: Refreshing Store');
-    loadStoreAndProductData().then(() => {
-        if (document.getElementById('rewards').classList.contains('active')) {
-            renderRewards(false);
-        }
-    });
-}, 2000);
-
-const refreshEvents = debounce(() => {
-    console.log('⚡ Realtime: Refreshing Events');
-    loadEventsData().then(() => {
-        if (document.getElementById('events').classList.contains('active')) {
-            renderEventsPage(false);
-        }
-    });
-}, 2000);
-
-const refreshChallenges = debounce(() => {
-    console.log('⚡ Realtime: Refreshing Challenges');
-    loadChallengesData().then(() => {
-        if (document.getElementById('challenges').classList.contains('active')) {
-            renderChallengesPage(false);
-        }
-    });
-}, 2000);
-
-export const initializeRealtime = () => {
+export const initRealtime = () => {
     if (!state.currentUser) return;
 
-    console.log('🔌 Initializing Supabase Realtime...');
-
-    // 1. User Specific Updates (Points, Check-ins, Orders)
-    supabase.channel('user-updates')
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'users', filter: `id=eq.${state.currentUser.id}` },
-            (payload) => {
-                console.log('🔔 User Change:', payload);
-                state.currentUser = { ...state.currentUser, ...payload.new };
-                refreshDashboard();
-            }
-        )
-        .on(
-            'postgres_changes', 
-            { event: '*', schema: 'public', table: 'daily_checkins', filter: `user_id=eq.${state.currentUser.id}` }, 
-            refreshDashboard
-        )
-        .on(
-            'postgres_changes', 
-            { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${state.currentUser.id}` }, 
-            () => {
-                import('./store.js').then(m => m.loadUserRewardsData());
-            }
-        )
+    // Listen to changes in specific tables
+    const channel = supabase.channel('public:eco_db_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `id=eq.${state.currentUser.id}` }, 
+            (payload) => handleUpdate('user', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_checkins', filter: `user_id=eq.${state.currentUser.id}` }, 
+            (payload) => handleUpdate('checkin', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, 
+            (payload) => handleUpdate('event', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, 
+            (payload) => handleUpdate('product', payload))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_streaks', filter: `user_id=eq.${state.currentUser.id}` }, 
+            (payload) => handleUpdate('streak', payload))
         .subscribe((status) => {
-             if (status === 'SUBSCRIBED') console.log('✅ User Channel Subscribed');
+            if (status === 'SUBSCRIBED') console.log('🟢 Realtime Connected');
         });
+};
 
-    // 2. Global App Updates (Products, Events, Challenges)
-    supabase.channel('global-updates')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, refreshStore)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, refreshEvents)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges' }, refreshChallenges)
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') console.log('✅ Global Channel Subscribed');
-        });
-        
-    logActivity('system', 'realtime_connected', 'Realtime channels active');
+const handleUpdate = (type, payload) => {
+    console.log(`⚡ Realtime Update: ${type}`, payload);
+    
+    // Debounce updates to prevent UI flickering on rapid DB changes
+    if (debounceTimer) clearTimeout(debounceTimer);
+    
+    debounceTimer = setTimeout(async () => {
+        if (type === 'user' || type === 'streak' || type === 'checkin') {
+            await refreshUserData();
+        }
+        if (type === 'event') {
+            await loadEventsData();
+        }
+        // Add other refresh logic as needed
+    }, 1000);
 };
