@@ -1,13 +1,12 @@
-import { supabase } from './supabase-client.js'; // Import Supabase
+import { supabase } from './supabase-client.js'; 
 import { state } from './state.js';
-import { els } from './utils.js';
+import { els, logActivity, cacheGet, cacheSet } from './utils.js';
 
 // ==========================================
 // ⚙️ CONFIGURATION
 // ==========================================
 // Update this if Supabase gives you a different URL
 const EDGE_FUNCTION_URL = 'https://aggqmjxhnsbmsymwblqg.supabase.co/functions/v1/chat-ai'; 
-// ^ REPLACE THIS with your actual Edge Function URL from Supabase Dashboard
 
 // ==========================================
 // 🧠 AI LOGIC (EcoBuddy's Brain)
@@ -16,7 +15,7 @@ const EDGE_FUNCTION_URL = 'https://aggqmjxhnsbmsymwblqg.supabase.co/functions/v1
 const getSystemPrompt = () => {
     const user = state.currentUser || { full_name: 'Eco-Warrior', current_points: 0, course: 'General' };
 
-    // Format Live Data
+    // Format Live Data (Safely)
     const activeEvents = state.events && state.events.length > 0 
         ? state.events.map(e => `• ${e.title} (${new Date(e.start_at).toLocaleDateString()})`).join('\n')
         : "No events right now.";
@@ -52,6 +51,11 @@ const getSystemPrompt = () => {
 };
 
 const fetchAIResponse = async (userMessage) => {
+    // 1. Offline Check
+    if (!navigator.onLine) {
+        return "🔌 I'm currently offline! Please check your internet connection to chat with me.";
+    }
+
     try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
@@ -61,7 +65,7 @@ const fetchAIResponse = async (userMessage) => {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token || ''}` // Optional: Pass auth token if you enable RLS on functions
+                'Authorization': `Bearer ${token || ''}` 
             },
             body: JSON.stringify({ 
                 message: userMessage,
@@ -76,16 +80,21 @@ const fetchAIResponse = async (userMessage) => {
 
     } catch (error) {
         console.error("AI Fetch Error:", error);
-        return "🔌 My brain is offline (Server Error). Try again later!";
+        logActivity('error', 'chatbot_fail', error.message);
+        return "🔌 My brain is having a hiccup (Server Error). Try again later!";
     }
 };
 
 // ==========================================
-// 💾 SUPABASE HISTORY LOGIC
+// 💾 SUPABASE HISTORY LOGIC (Cache-then-Network)
 // ==========================================
 
 const saveMessageToDB = async (role, message) => {
     if (!state.currentUser) return;
+    
+    // Don't try to save if offline, just let it live in UI
+    if (!navigator.onLine) return;
+
     try {
         await supabase.from('chat_history').insert({
             user_id: state.currentUser.id,
@@ -101,8 +110,29 @@ const loadChatHistory = async () => {
     if (!state.currentUser) return;
     
     const chatOutput = document.getElementById('chatbot-messages');
-    chatOutput.innerHTML = `<div class="text-center py-6"><p class="text-xs text-gray-400 dark:text-gray-600">Messages are secured with end-to-end encryption.</p></div>`;
+    const CACHE_KEY = `chat_history_${state.currentUser.id}`;
+    
+    // Helper to render a list of messages
+    const renderMessages = (messages) => {
+        chatOutput.innerHTML = `<div class="text-center py-6"><p class="text-xs text-gray-400 dark:text-gray-600">Messages are secured with end-to-end encryption.</p></div>`;
+        if (messages && messages.length > 0) {
+            // Clone to avoid reversing in place if using cached ref
+            [...messages].reverse().forEach(msg => appendMessageUI(msg.message, msg.role, false)); 
+            setTimeout(() => chatOutput.scrollTop = chatOutput.scrollHeight, 100);
+        } else {
+            appendMessageUI(`Hi ${state.currentUser.full_name}! I'm EcoBuddy. Ask me anything about BKBNC or saving the planet! 🌱`, 'bot');
+        }
+    };
 
+    // 1. Fast Load: Cache
+    const cachedHistory = await cacheGet(CACHE_KEY);
+    if (cachedHistory) {
+        renderMessages(cachedHistory);
+    } else {
+        chatOutput.innerHTML = `<div class="text-center py-6"><p class="text-xs text-gray-400">Loading chat history...</p></div>`;
+    }
+
+    // 2. Network Load: Fresh Data
     try {
         const { data, error } = await supabase
             .from('chat_history')
@@ -113,11 +143,11 @@ const loadChatHistory = async () => {
 
         if (error) throw error;
 
-        if (data && data.length > 0) {
-            data.reverse().forEach(msg => appendMessageUI(msg.message, msg.role, false)); 
-            setTimeout(() => chatOutput.scrollTop = chatOutput.scrollHeight, 100);
-        } else {
-            appendMessageUI(`Hi ${state.currentUser.full_name}! I'm EcoBuddy. Ask me anything about BKBNC or saving the planet! 🌱`, 'bot');
+        if (data) {
+            // Update Cache
+            await cacheSet(CACHE_KEY, data);
+            // Re-render to ensure latest sync
+            renderMessages(data);
         }
     } catch (err) {
         console.error("Load History Error:", err);
@@ -175,10 +205,13 @@ if (chatForm) {
         appendMessageUI(message, 'user');
         chatInput.value = '';
         
-        // 2. DB: Save User Message
+        // 2. Log Activity
+        logActivity('chat', 'send_message', 'User sent message to EcoBuddy');
+        
+        // 3. DB: Save User Message (Fire & Forget)
         saveMessageToDB('user', message);
 
-        // 3. UI: Show Typing
+        // 4. UI: Show Typing
         const typingId = 'typing-' + Date.now();
         const typingDiv = document.createElement('div');
         typingDiv.id = typingId;
@@ -196,15 +229,15 @@ if (chatForm) {
         chatOutput.appendChild(typingDiv);
         chatOutput.scrollTop = chatOutput.scrollHeight;
 
-        // 4. API: Fetch Response (Via Edge Function)
+        // 5. API: Fetch Response (Via Edge Function)
         const botResponse = await fetchAIResponse(message);
 
-        // 5. UI: Remove Typing & Show Response
+        // 6. UI: Remove Typing & Show Response
         const typingEl = document.getElementById(typingId);
         if(typingEl) typingEl.remove();
         appendMessageUI(botResponse, 'bot');
 
-        // 6. DB: Save Bot Response
+        // 7. DB: Save Bot Response
         saveMessageToDB('bot', botResponse);
     });
 }
@@ -214,6 +247,7 @@ if (chatForm) {
 // ==========================================
 
 window.openChatbotModal = () => {
+    logActivity('ui_interaction', 'open_chatbot', 'Opened EcoBuddy Interface');
     const modal = document.getElementById('chatbot-modal');
     modal.classList.remove('invisible'); 
     requestAnimationFrame(() => {
