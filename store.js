@@ -6,7 +6,7 @@ import { refreshUserData } from './app.js';
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 const getStore = (storeId) => state.stores.find(s => s.id === storeId);
 
-// 1. Load Data (Cache-First)
+// 1. Load Data & Extract Stores (Cache-First)
 export const loadStoreAndProductData = async () => {
     try {
         // A. Try Cache First
@@ -65,10 +65,13 @@ const processStoreData = (data) => {
     if (document.getElementById('rewards').classList.contains('active')) renderRewards();
 };
 
-// 2. Render Rewards (With Store Search)
+// 2. Render Rewards (With Store Search & Desktop Grid)
 export const renderRewards = () => {
     els.productGrid.innerHTML = '';
     
+    // Ensure Grid Classes are responsive
+    els.productGrid.className = "grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4";
+
     // --- SEARCH LOGIC ---
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
@@ -103,12 +106,13 @@ export const renderRewards = () => {
 
     // --- RENDER STORES (If Searching) ---
     if (matchingStores.length > 0) {
+        // On mobile: Horizontal Scroll. On Desktop: Grid
         els.productGrid.innerHTML += `
-            <div class="col-span-2 mb-2">
+            <div class="col-span-2 lg:col-span-4 xl:col-span-5 mb-2">
                 <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Matching Stores</h3>
-                <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar lg:grid lg:grid-cols-4 xl:grid-cols-5">
                     ${matchingStores.map(s => `
-                        <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px]">
+                        <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px] hover:shadow-md hover:border-green-200 dark:hover:border-green-800">
                             <img data-src="${s.logo_url || getPlaceholderImage('40x40')}" src="${getPlaceholderImage('40x40', 'Loading')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3 lazy-img">
                             <div>
                                 <p class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${s.name}</p>
@@ -123,14 +127,14 @@ export const renderRewards = () => {
 
     // --- RENDER PRODUCTS ---
     if (products.length === 0 && matchingStores.length === 0) { 
-        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2 py-8">No matches found.</p>`; 
+        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2 lg:col-span-4 py-8">No matches found.</p>`; 
         return; 
     }
 
     products.forEach(p => {
         const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
         els.productGrid.innerHTML += `
-            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform" onclick="showProductDetailPage('${p.id}')">
+            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform hover:shadow-xl hover:-translate-y-1" onclick="showProductDetailPage('${p.id}')">
                 <img data-src="${imageUrl}" src="${getPlaceholderImage('300x225', 'Loading')}" class="w-full h-40 object-cover lazy-img">
                 <div class="p-3 flex flex-col flex-grow">
                     <div class="flex items-center mb-1">
@@ -155,7 +159,7 @@ export const renderRewards = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 3. Store Page
+// 3. Store Page (Desktop-Optimized)
 export const openStorePage = (storeId) => {
     const store = getStore(storeId);
     if (!store) return;
@@ -166,7 +170,7 @@ export const openStorePage = (storeId) => {
     
     const storeDetailEl = document.getElementById('store-detail-page');
     storeDetailEl.innerHTML = `
-        <div class="relative w-full h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto pb-24">
+        <div class="relative w-full h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto pb-24 lg:pb-0">
             <div class="bg-white dark:bg-gray-950 p-6 pb-8 border-b border-gray-200 dark:border-gray-800 shadow-sm relative">
                 <button onclick="showPage('rewards')" class="absolute top-4 left-4 p-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <i data-lucide="arrow-left" class="w-5 h-5"></i>
@@ -182,7 +186,7 @@ export const openStorePage = (storeId) => {
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4 p-6">
+            <div class="grid grid-cols-2 gap-4 p-6 lg:grid-cols-4">
                 <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 text-center">
                     <p class="text-2xl font-black text-gray-900 dark:text-white">${storeProducts.length}</p>
                     <p class="text-xs text-gray-500 uppercase tracking-wider font-bold">Total Items</p>
@@ -195,11 +199,11 @@ export const openStorePage = (storeId) => {
 
             <div class="px-6 pb-6">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">All Products</h3>
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     ${storeProducts.map(p => {
                         const img = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage();
                         return `
-                        <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform cursor-pointer" onclick="showProductDetailPage('${p.id}')">
+                        <div class="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform cursor-pointer hover:shadow-lg" onclick="showProductDetailPage('${p.id}')">
                             <img data-src="${img}" src="${getPlaceholderImage('300x200', 'Loading')}" class="w-full h-32 object-cover lazy-img">
                             <div class="p-3">
                                 <p class="font-bold text-gray-900 dark:text-white text-xs line-clamp-1 mb-1">${p.name}</p>
@@ -218,14 +222,13 @@ export const openStorePage = (storeId) => {
             </div>
         </div>
     `;
-    
     window.showPage('store-detail-page');
     setupLazyImages();
     if(window.lucide) window.lucide.createIcons();
 }
 
 
-// 4. Product Detail
+// 4. Product Detail (Desktop Friendly)
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -238,74 +241,77 @@ export const showProductDetailPage = (productId) => {
     const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'FINISH', spec_value: 'Matte handcrafted' }, { spec_key: 'PRODUCT_TYPE', spec_value: 'Vintage Letter' }];
 
     els.productDetailPage.innerHTML = `
-        <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
+        <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28 lg:pb-0">
             
-            <div class="relative w-full h-[60vh] flex-shrink-0">
-                <img data-src="${imageUrl}" src="${getPlaceholderImage('400x600', 'Loading')}" class="w-full h-full object-cover lazy-img">
-                <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
-                    <i data-lucide="arrow-left" class="w-6 h-6"></i>
-                </button>
-                <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent"></div>
-            </div>
-
-            <div class="relative px-6 -mt-10 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh]">
-                <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50"></div>
-
-                <div class="mb-6">
-                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
-                    
-                    <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform">
-                         <img data-src="${product.storeLogo || getPlaceholderImage('20x20')}" src="${getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full lazy-img">
-                         <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
-                         <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
-                    </div>
-
-                    <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
-                    <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                        ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
-                    </p>
+            <div class="flex flex-col lg:flex-row h-full">
+            
+                <div class="relative w-full lg:w-1/2 h-[50vh] lg:h-full flex-shrink-0 bg-gray-100 dark:bg-gray-900">
+                    <img data-src="${imageUrl}" src="${getPlaceholderImage('400x600', 'Loading')}" class="w-full h-full object-cover lazy-img">
+                    <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
+                        <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                    </button>
+                    <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent lg:hidden"></div>
                 </div>
 
-                <div class="mb-8">
-                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
-                    <div class="space-y-3">
-                        ${highlights.map(h => `
-                            <div class="flex items-start p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
-                                <div class="flex-shrink-0 mt-0.5"><div class="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center"><i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i></div></div>
-                                <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
+                <div class="relative w-full lg:w-1/2 px-6 -mt-10 lg:mt-0 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] lg:rounded-none shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh] lg:h-full lg:overflow-y-auto lg:p-10">
+                    <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50 lg:hidden"></div>
+
+                    <div class="mb-6">
+                        <h1 class="text-2xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
+                        
+                        <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform hover:bg-gray-200 dark:hover:bg-gray-700">
+                             <img data-src="${product.storeLogo || getPlaceholderImage('20x20')}" src="${getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full lazy-img">
+                             <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
+                             <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
+                        </div>
+
+                        <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
+                        <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
+                            ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
+                        </p>
+                    </div>
+
+                    <div class="mb-8">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
+                        <div class="space-y-3">
+                            ${highlights.map(h => `
+                                <div class="flex items-start p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+                                    <div class="flex-shrink-0 mt-0.5"><div class="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center"><i data-lucide="check" class="w-3 h-3 text-emerald-600 dark:text-emerald-300"></i></div></div>
+                                    <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-200 leading-snug">${h}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            ${specs.map(s => `
+                                <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+                                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
+                                    <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">${s.spec_value}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
+                        <div class="flex items-center gap-2 mb-2"><i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i><h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3></div>
+                        <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.</p>
+                    </div>
+
+                    <div class="fixed bottom-0 left-0 right-0 lg:absolute lg:bottom-0 lg:left-0 lg:right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
+                        <div>
+                            <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-3xl font-black text-gray-900 dark:text-white">₹${product.discounted_price}</span>
+                                <span class="text-gray-400 text-sm font-medium">+</span>
+                                <div class="flex items-center text-[#00d685] font-bold text-xl"><i data-lucide="leaf" class="w-5 h-5 mr-1 fill-current"></i><span>${product.ecopoints_cost}</span></div>
                             </div>
-                        `).join('')}
+                        </div>
+                        <button onclick="openPurchaseModal('${product.id}')" ${canAfford ? '' : 'disabled'} class="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-black dark:hover:bg-gray-200 font-bold py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"><span>${canAfford ? 'Redeem Now' : 'Low Points'}</span><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                     </div>
                 </div>
-
-                <div class="mb-8">
-                    <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
-                    <div class="grid grid-cols-2 gap-3">
-                        ${specs.map(s => `
-                            <div class="bg-gray-50 dark:bg-gray-800/60 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">${s.spec_key}</p>
-                                <p class="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">${s.spec_value}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
-                    <div class="flex items-center gap-2 mb-2"><i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i><h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3></div>
-                    <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.</p>
-                </div>
-            </div>
-
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 max-w-[420px] mx-auto flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
-                <div>
-                    <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-3xl font-black text-gray-900 dark:text-white">₹${product.discounted_price}</span>
-                        <span class="text-gray-400 text-sm font-medium">+</span>
-                        <div class="flex items-center text-[#00d685] font-bold text-xl"><i data-lucide="leaf" class="w-5 h-5 mr-1 fill-current"></i><span>${product.ecopoints_cost}</span></div>
-                    </div>
-                </div>
-                <button onclick="openPurchaseModal('${product.id}')" ${canAfford ? '' : 'disabled'} class="bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-black dark:hover:bg-gray-200 font-bold py-3.5 px-6 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"><span>${canAfford ? 'Redeem Now' : 'Low Points'}</span><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
             </div>
         </div>
     `;
