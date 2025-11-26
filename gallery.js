@@ -6,7 +6,6 @@ export const loadGalleryData = async () => {
     const container = document.getElementById('gallery-grid');
     
     try {
-        // Optimization: Select specifically what we need
         const { data, error } = await supabase
             .from('campus_gallery')
             .select('*')
@@ -16,6 +15,7 @@ export const loadGalleryData = async () => {
 
         state.gallery = data || [];
         
+        // If GreenLens is the active page on load, render immediately
         if (document.getElementById('green-lens').classList.contains('active')) {
             renderGallery();
         }
@@ -26,6 +26,7 @@ export const loadGalleryData = async () => {
                 <div class="col-span-full flex flex-col items-center justify-center py-12 opacity-60 text-center">
                     <i data-lucide="image-off" class="w-10 h-10 text-gray-400 mb-2"></i>
                     <p class="text-sm text-gray-500">Gallery unavailable.</p>
+                    <p class="text-xs text-gray-400 mt-1">Please run SQL script.</p>
                 </div>
             `;
             if(window.lucide) window.lucide.createIcons();
@@ -56,11 +57,10 @@ export const renderGallery = () => {
         const displayUrl = (lowData && isVideo && item.thumbnail_url) ? item.thumbnail_url : item.media_url;
         const dateStr = formatDate(item.created_at);
         
-        // POST CARD CONTAINER
         const card = document.createElement('div');
         card.className = "bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-6"; 
         
-        // 1. HEADER (Title & Date)
+        // 1. HEADER
         const headerHTML = `
             <div class="p-4 flex items-center justify-between">
                 <div class="flex items-center gap-3">
@@ -78,7 +78,7 @@ export const renderGallery = () => {
             </div>
         `;
 
-        // 2. MEDIA SECTION (Full Width)
+        // 2. MEDIA
         let mediaHTML = '';
         if (isVideo && !lowData) {
             mediaHTML = `
@@ -99,7 +99,7 @@ export const renderGallery = () => {
                 </div>`;
         }
 
-        // 3. FOOTER (Description & Tags)
+        // 3. FOOTER
         const footerHTML = `
             <div class="p-4">
                 <p class="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mb-3">
@@ -120,10 +120,8 @@ export const renderGallery = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// Lightbox Logic
 export const openLightbox = (itemId) => {
-    // Find item by ID instead of passing object to avoid serialization issues in HTML attributes
-    const item = state.gallery.find(i => i.id == itemId); 
+    const item = state.gallery.find(i => i.id == itemId);
     if(!item) return;
 
     logUserActivity('view_gallery_item', `Opened ${item.media_type}: ${item.title}`);
@@ -159,5 +157,6 @@ export const closeLightbox = () => {
     modal.classList.remove('flex', 'opacity-100');
 };
 
+window.renderGalleryWrapper = renderGallery; // Explicitly Attach for utils.js
 window.openLightbox = openLightbox;
 window.closeLightbox = closeLightbox;
