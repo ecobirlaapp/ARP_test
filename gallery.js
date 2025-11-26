@@ -3,6 +3,8 @@ import { state } from './state.js';
 import { els, getPlaceholderImage, logUserActivity, isLowDataMode } from './utils.js';
 
 export const loadGalleryData = async () => {
+    const container = document.getElementById('gallery-grid');
+    
     try {
         const { data, error } = await supabase
             .from('campus_gallery')
@@ -13,11 +15,23 @@ export const loadGalleryData = async () => {
 
         state.gallery = data || [];
         
+        // Check if user is currently looking at the GreenLens page
         if (document.getElementById('green-lens').classList.contains('active')) {
             renderGallery();
         }
     } catch (err) {
         console.error('Gallery Load Error:', err);
+        // FIX: Update UI on error so it doesn't get stuck on "Loading..."
+        if (container) {
+            container.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-12 opacity-60 text-center">
+                    <i data-lucide="image-off" class="w-10 h-10 text-gray-400 mb-2"></i>
+                    <p class="text-sm text-gray-500">Gallery unavailable.</p>
+                    <p class="text-xs text-gray-400 mt-1">Database table might be missing.</p>
+                </div>
+            `;
+            if(window.lucide) window.lucide.createIcons();
+        }
     }
 };
 
@@ -48,7 +62,12 @@ export const renderGallery = (filter = 'all') => {
     }
 
     if (items.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-gray-500">No moments captured yet.</div>`;
+        container.innerHTML = `
+            <div class="col-span-full flex flex-col items-center justify-center py-12 opacity-60 text-center">
+                <i data-lucide="camera" class="w-10 h-10 text-gray-400 mb-2"></i>
+                <p class="text-sm text-gray-500">No moments captured yet.</p>
+            </div>`;
+        if(window.lucide) window.lucide.createIcons();
         return;
     }
 
@@ -56,7 +75,7 @@ export const renderGallery = (filter = 'all') => {
 
     items.forEach(item => {
         const isVideo = item.media_type === 'video';
-        // If low data, use thumbnail for video if available, else placeholder
+        // Low data optimization: use thumb if available
         const displayUrl = (lowData && isVideo && item.thumbnail_url) ? item.thumbnail_url : item.media_url;
         
         const card = document.createElement('div');
@@ -64,6 +83,7 @@ export const renderGallery = (filter = 'all') => {
         card.onclick = () => openLightbox(item);
 
         let mediaHTML = '';
+        // Only render full video if NOT low data mode
         if (isVideo && !lowData) {
             mediaHTML = `
                 <video src="${displayUrl}" class="w-full h-auto object-cover" muted loop onmouseover="this.play()" onmouseout="this.pause()"></video>
@@ -74,8 +94,9 @@ export const renderGallery = (filter = 'all') => {
                 </div>
             `;
         } else {
-            // Image or Low Data Video Fallback
-            mediaHTML = `<img src="${isVideo ? (item.thumbnail_url || getPlaceholderImage('400x300', 'Video')) : displayUrl}" class="w-full h-auto object-cover" loading="lazy">`;
+            // Fallback to image tag for photos OR videos in low data mode
+            const poster = isVideo ? (item.thumbnail_url || getPlaceholderImage('400x300', 'Video')) : displayUrl;
+            mediaHTML = `<img src="${poster}" class="w-full h-auto object-cover" loading="lazy">`;
             if(isVideo) {
                  mediaHTML += `<div class="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-md backdrop-blur-md"><i data-lucide="video" class="w-3 h-3 inline mr-1"></i>Video</div>`;
             }
