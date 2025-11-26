@@ -30,6 +30,7 @@ export const isLowDataMode = () => {
 export const logUserActivity = async (actionType, description, metadata = {}) => {
     try {
         if (!state.currentUser) return;
+        // Non-blocking insert
         supabase.from('user_activity_log').insert({
             user_id: state.currentUser.id,
             action_type: actionType,
@@ -38,7 +39,9 @@ export const logUserActivity = async (actionType, description, metadata = {}) =>
         }).then(({ error }) => {
             if (error) console.warn("Activity log failed:", error.message);
         });
-    } catch (err) {}
+    } catch (err) {
+        // Fail silently to avoid disrupting UX
+    }
 };
 
 // --- DOM CACHE ---
@@ -69,7 +72,10 @@ export const els = {
     get qrModal() { return document.getElementById('qr-modal'); }
 };
 
+// --- IMAGE & UI HELPERS ---
+
 export const getPlaceholderImage = (size = '400x300', text = 'EcoCampus') => {
+    // Optimization: Request smaller images on low data
     if (isLowDataMode()) {
         const dims = size.split('x').map(n => Math.floor(parseInt(n)/2)).join('x');
         return `https://placehold.co/${dims}/EBFBEE/166534?text=${text}&font=inter`;
@@ -119,7 +125,7 @@ export const formatDate = (dateString, options = {}) => {
     return new Date(dateString).toLocaleDateString('en-IN', finalOptions);
 };
 
-// ---------------------------
+// --- ICONS & INITIALS ---
 
 export const getIconForHistory = (type) => {
     const icons = { 'checkin': 'calendar-check', 'event': 'calendar-check', 'challenge': 'award', 'plastic': 'recycle', 'order': 'shopping-cart', 'coupon': 'ticket', 'quiz': 'brain' };
@@ -135,6 +141,8 @@ export const getUserInitials = (fullName) => {
     if (!fullName) return '..';
     return fullName.split(' ').map(n => n[0]).join('').toUpperCase();
 };
+
+// --- UPLOAD ---
 
 export const uploadToCloudinary = async (file) => {
     const formData = new FormData();
@@ -156,6 +164,8 @@ export const uploadToCloudinary = async (file) => {
     }
 };
 
+// --- NAVIGATION LOGIC ---
+
 export const showPage = (pageId, addToHistory = true) => {
     logUserActivity('view_page', `Mapsd to ${pageId}`);
 
@@ -164,7 +174,7 @@ export const showPage = (pageId, addToHistory = true) => {
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
-    // Clear Detail Pages
+    // Clear Detail Pages to prevent stale data
     if (!['store-detail-page', 'product-detail-page'].includes(pageId)) {
         els.storeDetailPage.innerHTML = ''; els.productDetailPage.innerHTML = '';
     }
@@ -182,9 +192,10 @@ export const showPage = (pageId, addToHistory = true) => {
         window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
     }
 
-    // Logic Routing
-    if (els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden'); // Default hide
+    // Reset Leaf Layer visibility
+    if (els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
 
+    // Route Handling
     if (pageId === 'dashboard') { 
         renderDashboard(); 
     } 
@@ -213,10 +224,15 @@ export const showPage = (pageId, addToHistory = true) => {
         renderProfile(); 
     }
     else if (pageId === 'green-lens') { 
-        // FIX: Trigger Gallery Render explicitly
+        // Trigger Gallery Render
         window.renderGalleryWrapper && window.renderGalleryWrapper();
     }
+    else if (pageId === 'plastic-log') {
+        // Dynamic Import for Plastic Log Page
+        import('./plastic-log.js').then(m => m.renderPlasticLogPage());
+    }
 
+    // Mobile: Close sidebar on navigation
     if (window.innerWidth < 1024) {
         toggleSidebar(true); 
     }
@@ -247,5 +263,6 @@ export const toggleSidebar = (forceClose = false) => {
     }
 };
 
+// Attach globally
 window.showPage = showPage;
 window.toggleSidebar = toggleSidebar;
