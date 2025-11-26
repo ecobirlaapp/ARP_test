@@ -8,7 +8,7 @@ export const loadDashboardData = async () => {
         const userId = state.currentUser.id;
         const todayIST = getTodayIST(); 
 
-        // Optimization: Use Promise.all for parallel fetching
+        // FIX: Use maybeSingle() for impactData to prevent 406 error on new users
         const [
             { data: checkinData },
             { data: streakData },
@@ -16,7 +16,7 @@ export const loadDashboardData = async () => {
         ] = await Promise.all([
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
             supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
-            supabase.from('user_impact').select('*').eq('user_id', userId).single()
+            supabase.from('user_impact').select('*').eq('user_id', userId).maybeSingle() // <--- CHANGED THIS
         ]);
         
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
@@ -25,16 +25,18 @@ export const loadDashboardData = async () => {
         
     } catch (err) {
         console.error('Dashboard Data Error:', err);
+        // Ensure we set defaults if it fails, so the app doesn't break
+        if (state.currentUser) {
+             state.currentUser.impact = { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
+        }
     }
 };
 
 export const renderDashboard = () => {
     if (!state.currentUser) return; 
     
-    // Log View (Once per session/load, or debounced could be better, but this is fine for now)
-    // We put this here to ensure it logs when the user actually sees the dashboard
     if (document.getElementById('dashboard').classList.contains('active')) {
-        // Optional: Add a simple check to avoid spamming log on every re-render
+        // Log activity if needed
     }
 
     renderDashboardUI();
@@ -44,11 +46,9 @@ export const renderDashboard = () => {
 const renderDashboardUI = () => {
     const user = state.currentUser;
     
-    // Update Header Points
     if(els.userPointsHeader) els.userPointsHeader.textContent = user.current_points;
     if(els.userNameGreeting) els.userNameGreeting.textContent = user.full_name;
     
-    // Update Sidebar Elements (Both Mobile & Desktop exist in DOM now)
     const sidebarName = document.getElementById('user-name-sidebar');
     const sidebarPoints = document.getElementById('user-points-sidebar');
     const sidebarLevel = document.getElementById('user-level-sidebar');
@@ -66,7 +66,6 @@ const renderDashboardUI = () => {
         sidebarAvatar.src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
     }
 
-    // Impact Stats
     const impactRecycled = document.getElementById('impact-recycled');
     const impactCo2 = document.getElementById('impact-co2');
     const impactEvents = document.getElementById('impact-events');
@@ -101,9 +100,7 @@ const renderCheckinButtonState = () => {
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
     
-    // Log Interaction
     logUserActivity('ui_interaction', 'Opened check-in modal');
-
     const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.add('open');
     checkinModal.classList.remove('invisible', 'opacity-0');
@@ -111,9 +108,7 @@ export const openCheckinModal = () => {
     const calendarContainer = document.getElementById('checkin-modal-calendar');
     calendarContainer.innerHTML = '';
     
-    // Visual Calendar (Local Time for display is fine, creates better UX)
     const today = new Date(); 
-    
     for (let i = -3; i <= 3; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
@@ -123,15 +118,13 @@ export const openCheckinModal = () => {
             <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
                 <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
                 <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
-            </div>
-        `;
+            </div>`;
     }
     document.getElementById('checkin-modal-streak').textContent = `${state.currentUser.checkInStreak || 0} Days`;
     document.getElementById('checkin-modal-button-container').innerHTML = `
         <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
             Check-in &amp; Earn ${state.checkInReward} Points
-        </button>
-    `;
+        </button>`;
 };
 
 export const closeCheckinModal = () => {
@@ -151,7 +144,6 @@ export const handleDailyCheckin = async () => {
 
     try {
         const todayIST = getTodayIST();
-
         const { error } = await supabase.from('daily_checkins').insert({ 
             user_id: state.currentUser.id, 
             points_awarded: state.checkInReward,
@@ -159,21 +151,15 @@ export const handleDailyCheckin = async () => {
         });
         
         if (error) throw error;
-
-        // Log Success
         logUserActivity('checkin_success', `Daily check-in completed. Streak: ${optimisticStreak}`);
-
         closeCheckinModal();
 
-        // Optimistic Update
         state.currentUser.checkInStreak = optimisticStreak;
         state.currentUser.isCheckedInToday = true;
-        state.currentUser.current_points += state.checkInReward; // Optimistic points add
+        state.currentUser.current_points += state.checkInReward; 
         
         renderCheckinButtonState();
-        renderDashboardUI(); // Update points immediately
-
-        // Background sync to ensure consistency
+        renderDashboardUI();
         await refreshUserData(); 
 
     } catch (err) {
@@ -190,7 +176,6 @@ export const handleDailyCheckin = async () => {
 
 export const loadHistoryData = async () => {
     try {
-        // Optimization: Limit to last 20 items for performance
         const { data, error } = await supabase
             .from('points_ledger')
             .select('*')
@@ -234,10 +219,7 @@ export const renderHistory = () => {
 export const renderProfile = () => {
     const u = state.currentUser;
     if (!u) return;
-    
-    // Log View
     logUserActivity('view_profile', 'Viewed profile page');
-
     const l = getUserLevel(u.lifetime_points);
     
     const nameEl = document.getElementById('profile-name');
@@ -270,35 +252,28 @@ export const renderProfile = () => {
 export const setupFileUploads = () => {
     const profileInput = document.getElementById('profile-upload-input');
     if (profileInput) {
-        // Remove existing listener to avoid duplicates if re-initialized
         const newProfileInput = profileInput.cloneNode(true);
         profileInput.parentNode.replaceChild(newProfileInput, profileInput);
 
         newProfileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
             const avatarEl = document.getElementById('profile-avatar');
             const originalSrc = avatarEl.src;
             avatarEl.style.opacity = '0.5';
             
             try {
-                // Log Start
                 logUserActivity('upload_profile_pic_start', 'Started uploading profile picture');
-                
                 const imageUrl = await uploadToCloudinary(file);
                 const { error } = await supabase.from('users').update({ profile_img_url: imageUrl }).eq('id', state.currentUser.id);
                 if (error) throw error;
                 
                 state.currentUser.profile_img_url = imageUrl;
-                
-                // Update Sidebar avatar immediately too
                 const sidebarAvatar = document.getElementById('user-avatar-sidebar');
                 if(sidebarAvatar) sidebarAvatar.src = imageUrl;
 
                 renderProfile();
                 renderDashboardUI(); 
-                
                 alert('Profile picture updated!');
                 logUserActivity('upload_profile_pic_success', 'Profile picture updated');
 
