@@ -85,10 +85,14 @@
                 <button onclick="showPage('history')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="history" class="w-5 h-5 mr-3"></i>History</button>
                 <button onclick="showPage('leaderboard')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="users" class="w-5 h-5 mr-3"></i>Leaderboard</button>
                 <button onclick="showPage('events')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="calendar" class="w-5 h-5 mr-3"></i>All Events</button>
+                
                 <button onclick="showPage('green-lens')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="aperture" class="w-5 h-5 mr-3"></i>GreenLens</button>
+                <button onclick="showPage('plastic-log')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="recycle" class="w-5 h-5 mr-3"></i>Plastic Log</button>
+                
                 <button onclick="showPage('challenges')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hidden lg:flex"><i data-lucide="camera" class="w-5 h-5 mr-3"></i>Challenges</button>
                 <button onclick="showPage('rewards')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hidden lg:flex"><i data-lucide="store" class="w-5 h-5 mr-3"></i>Store</button>
                 <button onclick="showPage('redeem-code')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="ticket" class="w-5 h-5 mr-3"></i>Redeem Code</button>
+                
                 <div class="pt-2 border-t border-gray-200 dark:border-gray-700"></div>
                 <button onclick="showPage('about')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="info" class="w-5 h-5 mr-3"></i>About Us</button>
                 <button onclick="showPage('help')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="help-circle" class="w-5 h-5 mr-3"></i>Help & Support</button>
@@ -185,9 +189,15 @@
                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Capturing our impact, one frame at a time.</p>
                         </div>
                     </div>
-
                     <div id="gallery-grid" class="w-full max-w-xl mx-auto space-y-6">
                         <div class="col-span-full text-center py-10 text-gray-400">Loading GreenLens...</div>
+                    </div>
+                </div>
+
+                <div id="plastic-log" class="page p-6">
+                    <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Plastic Log</h2>
+                    <div id="plastic-log-content">
+                        <p class="text-center text-gray-500">Loading records...</p>
                     </div>
                 </div>
 
@@ -344,13 +354,10 @@
     <button onclick="openChatbotModal()" id="chatbot-btn" class="fixed z-30 bottom-24 lg:bottom-10 right-6 w-16 h-16 flex items-center justify-center hover:scale-105 transition-transform"><img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="EcoBot" class="w-full h-full object-contain drop-shadow-xl"></button>
 
     <div id="checkin-modal" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end justify-center opacity-0 invisible" onclick="closeCheckinModal()"><div id="checkin-modal-content" class="bg-white dark:bg-gray-800 rounded-t-2xl w-full max-w-md p-6 transform translate-y-full" onclick="event.stopPropagation()"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Daily Check-in</h3><button onclick="closeCheckinModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div><p id="checkin-modal-streak" class="text-center text-5xl font-extrabold text-yellow-600 mb-6">0 Days</p><div id="checkin-modal-calendar" class="flex justify-center space-x-2 mb-6"></div><div id="checkin-modal-button-container"></div></div></div>
-    
     <div id="purchase-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closePurchaseModal()"></div>
     <div id="purchase-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
-    
     <div id="qr-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closeQrModal()"></div>
     <div id="qr-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
-    
     <div id="camera-modal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
         <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
             <video id="camera-feed" autoplay playsinline class="w-full h-full object-cover"></video>
@@ -358,19 +365,12 @@
             <button onclick="closeCameraModal()" class="absolute top-6 right-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md"><i data-lucide="x" class="w-6 h-6"></i></button>
             <button onclick="switchCamera()" class="absolute top-6 left-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md"><i data-lucide="refresh-ccw" class="w-6 h-6"></i></button>
         </div>
-        <div class="h-32 bg-black flex items-center justify-center space-x-12 pb-8">
-            <button onclick="capturePhoto()" class="w-20 h-20 rounded-full bg-white border-4 border-gray-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"><div class="w-16 h-16 rounded-full bg-white border-2 border-black"></div></button>
-        </div>
+        <div class="h-32 bg-black flex items-center justify-center space-x-12 pb-8"><button onclick="capturePhoto()" class="w-20 h-20 rounded-full bg-white border-4 border-gray-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"><div class="w-16 h-16 rounded-full bg-white border-2 border-black"></div></button></div>
     </div>
 
     <div id="eco-quiz-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center opacity-0 invisible p-4 transition-all">
         <div id="eco-quiz-modal-content" class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm p-6 transform scale-95 transition-transform">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                    <i data-lucide="brain" class="w-5 h-5 text-indigo-500"></i> Eco Quiz
-                </h3>
-                <button onclick="closeEcoQuizModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
+            <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><i data-lucide="brain" class="w-5 h-5 text-indigo-500"></i> Eco Quiz</h3><button onclick="closeEcoQuizModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button></div>
             <div id="eco-quiz-loading" class="text-center py-8"><i data-lucide="loader-2" class="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2"></i><p class="text-sm text-gray-500">Loading Question...</p></div>
             <div id="eco-quiz-body" class="hidden"><p id="eco-quiz-question" class="text-lg font-bold text-gray-900 dark:text-gray-100 mb-6 text-center leading-snug">...</p><div id="eco-quiz-options" class="space-y-3"></div><div id="eco-quiz-feedback" class="hidden mt-4 text-center font-bold"></div></div>
             <div id="eco-quiz-already-played" class="hidden text-center py-6"><div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="check-circle-2" class="w-8 h-8 text-green-600 dark:text-green-400"></i></div><h4 class="text-lg font-bold text-gray-900 dark:text-gray-100">All Done!</h4><p class="text-sm text-gray-500 dark:text-gray-400 mt-1">You've already played today's quiz.</p><button onclick="closeEcoQuizModal()" class="mt-6 w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl">Close</button></div>
