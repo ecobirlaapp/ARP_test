@@ -601,3 +601,12 @@ body.low-data-mode .animate-float {
 .animate-breathe {
     animation: breathe 6s ease-in-out infinite;
 }
+
+/* Custom Utilities for Gallery Shapes */
+.rounded-t-full {
+    border-top-left-radius: 9999px;
+    border-top-right-radius: 9999px;
+}
+.font-jakarta {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
