@@ -6,8 +6,9 @@ const CAMPUS_STORIES = [
     {
         id: 'story-hero',
         isHero: true,
+        // White for Hero
         bgHex: '#ffffff', 
-        darkBgHex: '#111827' 
+        isDark: false // Text color logic
     },
     {
         id: 'story-solar',
@@ -15,7 +16,9 @@ const CAMPUS_STORIES = [
         subtitle: 'The Solar Canopy Initiative',
         description: 'Our B-Block roof isn\'t just a shelter; it\'s a power station. Generating 50kW of clean energy daily, this architectural marvel powers our science labs and stands as a testament to our carbon-neutral goals.',
         image: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1200&q=80', 
+        // Deep Forest Green
         bgHex: '#1a2e05', 
+        isDark: true, // Triggers white text on sidebar
         textClass: 'text-[#ecfccb]', 
         headingClass: 'text-white',
         accentColor: 'bg-[#84cc16]', 
@@ -28,7 +31,9 @@ const CAMPUS_STORIES = [
         subtitle: 'Native Botanical Sanctuary',
         description: 'Forget dull lectures. Our Botany students learn in the "Living Library"—a curated sanctuary of 200+ indigenous plant species. It is a classroom where local biodiversity thrives.',
         image: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80',
+        // Warm Sandstone
         bgHex: '#fffbeb', 
+        isDark: false,
         textClass: 'text-[#78350f]', 
         headingClass: 'text-[#451a03]', 
         accentColor: 'bg-[#d97706]', 
@@ -41,7 +46,9 @@ const CAMPUS_STORIES = [
         subtitle: 'Zero-Waste Cafeteria',
         description: 'We are redefining consumption. From biodegradable sugarcane plates to our on-site bio-gas plant that turns leftovers into energy, every meal served here is a step towards a landfill-free campus.',
         image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
+        // Earthen Clay
         bgHex: '#7c2d12',
+        isDark: true,
         textClass: 'text-[#ffedd5]',
         headingClass: 'text-white',
         accentColor: 'bg-[#fdba74]',
@@ -54,7 +61,9 @@ const CAMPUS_STORIES = [
         subtitle: 'Smart Water Conservation',
         description: 'Our rainwater harvesting systems collect over 100,000 liters annually, recharging the campus groundwater tables. We don’t just use water; we respect it, protect it, and replenish it.',
         image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
+        // Deep Ocean
         bgHex: '#083344',
+        isDark: true,
         textClass: 'text-[#cffafe]',
         headingClass: 'text-white',
         accentColor: 'bg-[#06b6d4]',
@@ -63,7 +72,6 @@ const CAMPUS_STORIES = [
     }
 ];
 
-// 1. Load Data
 export const loadGalleryData = async () => {
     state.gallery = CAMPUS_STORIES;
     if (document.getElementById('green-lens').classList.contains('active')) {
@@ -71,7 +79,6 @@ export const loadGalleryData = async () => {
     }
 };
 
-// 2. Render
 export const renderGallery = () => {
     const container = document.getElementById('gallery-feed');
     if (!container) return;
@@ -82,14 +89,15 @@ export const renderGallery = () => {
     state.gallery.forEach((item, index) => {
         const section = document.createElement('div');
         
+        // --- HERO ---
         if (item.isHero) {
-            // FIX: Removed 'sticky' and adjusted height/padding
-            section.className = "gallery-section min-h-[90vh] flex flex-col items-center justify-center text-center px-6 relative bg-white dark:bg-gray-950";
+            section.className = "gallery-section min-h-[90vh] flex flex-col items-center justify-center text-center px-6 relative z-10";
+            // Data attributes for the observer
             section.setAttribute('data-bg', item.bgHex);
-            section.setAttribute('data-bg-dark', item.darkBgHex);
+            section.setAttribute('data-is-dark', item.isDark);
             
             section.innerHTML = `
-                <div class="animate-slideUp max-w-4xl mx-auto z-10 relative">
+                <div class="animate-slideUp max-w-4xl mx-auto">
                     <span class="inline-block px-4 py-1.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-xs font-bold tracking-widest uppercase mb-6">
                         The GreenLens Project
                     </span>
@@ -105,17 +113,13 @@ export const renderGallery = () => {
                 </div>
             `;
         } else {
+            // --- STORY ---
             const flexDirection = item.layout === 'reverse' ? 'lg:flex-row-reverse' : 'lg:flex-row';
             
-            // FIX: Ensure full width and proper spacing
-            section.className = `gallery-section min-h-screen w-full flex flex-col ${flexDirection} items-center justify-center gap-12 lg:gap-24 px-6 lg:px-24 py-20 relative`;
-            
-            // Apply inline style for specific section background immediately
-            // This ensures the color is there even before the intersection observer fires for smoother scrolling
-            section.style.backgroundColor = item.bgHex; 
+            section.className = `gallery-section min-h-screen w-full flex flex-col ${flexDirection} items-center justify-center gap-12 lg:gap-24 px-6 lg:px-24 py-20 relative z-10`;
             
             section.setAttribute('data-bg', item.bgHex);
-            section.setAttribute('data-bg-dark', item.bgHex);
+            section.setAttribute('data-is-dark', item.isDark);
 
             const imgHTML = `
                 <div class="w-full lg:w-1/2 flex justify-center items-center relative z-10">
@@ -132,19 +136,18 @@ export const renderGallery = () => {
                         <span class="h-0.5 w-12 ${item.accentColor}"></span>
                         <span class="text-xs font-bold tracking-[0.2em] uppercase ${item.textClass} opacity-90">${item.subtitle}</span>
                     </div>
-                    
                     <h2 class="text-5xl md:text-7xl font-black font-jakarta leading-tight mb-8 ${item.headingClass}">
                         ${item.title}
                     </h2>
-                    
                     <p class="text-lg md:text-xl leading-relaxed ${item.textClass} opacity-90 max-w-xl mx-auto lg:mx-0 font-medium">
                         ${item.description}
                     </p>
                 </div>
             `;
 
+            // Huge background number
             const decorHTML = `
-                <div class="absolute top-10 left-10 md:left-20 text-[12rem] font-black opacity-10 select-none pointer-events-none mix-blend-overlay text-white leading-none font-jakarta z-0">
+                <div class="absolute top-20 left-4 md:left-20 text-[15rem] font-black opacity-10 select-none pointer-events-none mix-blend-overlay ${item.headingClass} leading-none font-jakarta z-0">
                     0${index}
                 </div>
             `;
@@ -155,11 +158,11 @@ export const renderGallery = () => {
         container.appendChild(section);
     });
 
-    // Footer
+    // --- FOOTER ---
     const footer = document.createElement('div');
-    footer.className = "gallery-section min-h-[50vh] flex flex-col items-center justify-center text-center px-6 relative bg-[#111827]";
-    footer.setAttribute('data-bg', '#111827');
-    footer.setAttribute('data-bg-dark', '#000000');
+    footer.className = "gallery-section min-h-[50vh] flex flex-col items-center justify-center text-center px-6 relative z-20";
+    footer.setAttribute('data-bg', '#111827'); 
+    footer.setAttribute('data-is-dark', 'true');
     footer.innerHTML = `
         <h3 class="text-4xl font-bold text-white mb-6">Be Part of the Story.</h3>
         <button onclick="showPage('challenges')" class="group relative px-8 py-4 bg-green-600 text-white font-bold rounded-full overflow-hidden shadow-lg hover:shadow-green-500/50 transition-all">
@@ -172,24 +175,47 @@ export const renderGallery = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
+// --- SCROLL OBSERVER (The Magic Part) ---
 const setupScrollObserver = () => {
-    const mainContent = document.querySelector('.main-content');
+    const mainContent = document.querySelector('.main-content'); // Scroll Container
+    const sidebar = document.getElementById('sidebar'); // Sidebar
+    const header = document.querySelector('header'); // Header
     const sections = document.querySelectorAll('.gallery-section');
 
     const observerOptions = {
-        root: mainContent, // Watch scroll inside main-content
-        threshold: 0.5 // Trigger when 50% of the section is visible
+        root: mainContent, 
+        threshold: 0.4 // Change color when 40% of new section is visible
     };
 
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                const bg = document.documentElement.classList.contains('dark') 
-                    ? entry.target.getAttribute('data-bg-dark') 
-                    : entry.target.getAttribute('data-bg');
+                const bg = entry.target.getAttribute('data-bg');
+                const isDark = entry.target.getAttribute('data-is-dark') === 'true';
                 
                 if (bg) {
+                    // 1. Change Main BG
                     mainContent.style.backgroundColor = bg;
+                    
+                    // 2. Change Sidebar BG (Desktop)
+                    if (sidebar) {
+                        sidebar.style.backgroundColor = bg;
+                        // Toggle Text Color for Contrast
+                        if (isDark) {
+                            sidebar.classList.add('dark'); // Force dark mode text style
+                            sidebar.classList.add('force-dark-text');
+                        } else {
+                            sidebar.classList.remove('dark');
+                            sidebar.classList.remove('force-dark-text');
+                        }
+                    }
+
+                    // 3. Change Header BG
+                    if (header) {
+                        header.style.backgroundColor = bg;
+                        if (isDark) header.classList.add('dark');
+                        else header.classList.remove('dark');
+                    }
                 }
             }
         });
@@ -198,9 +224,19 @@ const setupScrollObserver = () => {
     sections.forEach(section => observer.observe(section));
 };
 
+// Helper to Reset on Exit
 export const resetGalleryBackground = () => {
     const mainContent = document.querySelector('.main-content');
-    if(mainContent) mainContent.style.backgroundColor = ''; 
+    const sidebar = document.getElementById('sidebar');
+    const header = document.querySelector('header');
+
+    if (mainContent) mainContent.style.backgroundColor = '';
+    if (sidebar) {
+        sidebar.style.backgroundColor = '';
+        sidebar.classList.remove('force-dark-text');
+        // Let normal theme logic handle 'dark' class
+    }
+    if (header) header.style.backgroundColor = '';
 };
 
 window.renderGalleryWrapper = renderGallery;
