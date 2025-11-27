@@ -1,162 +1,157 @@
-import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage, logUserActivity, isLowDataMode, formatDate } from './utils.js';
+import { logUserActivity } from './utils.js';
 
+// --- STATIC DATA (Configuration) ---
+// Replace these URLs with actual photos of your college campus later
+const CAMPUS_STORIES = [
+    {
+        id: 'story-1',
+        title: 'The Solar Canopy Project',
+        category: 'Energy',
+        description: 'Our B-Block roof is now 100% solar-powered, generating 50kW of clean energy daily for the science labs.',
+        image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80',
+        size: 'large' // Spans 2 columns on desktop
+    },
+    {
+        id: 'story-2',
+        title: 'Native Botanical Garden',
+        category: 'Biodiversity',
+        description: 'Preserving local flora with over 200 indigenous plant species maintained by the Botany department.',
+        image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=800&q=80',
+        size: 'normal'
+    },
+    {
+        id: 'story-3',
+        title: 'Zero-Waste Cafeteria',
+        category: 'Sustainability',
+        description: 'Converting 100% of wet waste into compost for our gardens using the new bio-gas plant.',
+        image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80',
+        size: 'normal'
+    },
+    {
+        id: 'story-4',
+        title: 'Paperless Campus Drive',
+        category: 'Digital',
+        description: 'Moving 90% of administrative work to digital platforms to save 500+ trees annually.',
+        image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80',
+        size: 'normal'
+    },
+    {
+        id: 'story-5',
+        title: 'Eco-Warriors Team',
+        category: 'Community',
+        description: 'Meet the student council members leading the change for a greener tomorrow.',
+        image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=800&q=80',
+        size: 'normal'
+    }
+];
+
+// 1. Load Data (Now Static)
 export const loadGalleryData = async () => {
-    const container = document.getElementById('gallery-grid');
+    // Simulate "loading" for a split second for smoothness, but no API call
+    state.gallery = CAMPUS_STORIES;
     
-    try {
-        const { data, error } = await supabase
-            .from('campus_gallery')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        state.gallery = data || [];
-        
-        // If GreenLens is the active page on load, render immediately
-        if (document.getElementById('green-lens').classList.contains('active')) {
-            renderGallery();
-        }
-    } catch (err) {
-        console.error('Gallery Load Error:', err);
-        if (container) {
-            container.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center py-12 opacity-60 text-center">
-                    <i data-lucide="image-off" class="w-10 h-10 text-gray-400 mb-2"></i>
-                    <p class="text-sm text-gray-500">Gallery unavailable.</p>
-                    <p class="text-xs text-gray-400 mt-1">Please run SQL script.</p>
-                </div>
-            `;
-            if(window.lucide) window.lucide.createIcons();
-        }
+    // Render immediately if on the page
+    if (document.getElementById('green-lens').classList.contains('active')) {
+        renderGallery();
     }
 };
 
+// 2. Render Gallery (Flagler/College Website Style)
 export const renderGallery = () => {
     const container = document.getElementById('gallery-grid');
     if (!container) return;
     
+    // Update Container Layout for "Bento" style grid
+    container.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl mx-auto";
     container.innerHTML = '';
 
-    if (state.gallery.length === 0) {
-        container.innerHTML = `
-            <div class="col-span-full flex flex-col items-center justify-center py-12 opacity-60 text-center">
-                <i data-lucide="camera" class="w-10 h-10 text-gray-400 mb-2"></i>
-                <p class="text-sm text-gray-500">No posts yet.</p>
-            </div>`;
-        if(window.lucide) window.lucide.createIcons();
-        return;
-    }
-
-    const lowData = isLowDataMode();
-
     state.gallery.forEach(item => {
-        const isVideo = item.media_type === 'video';
-        const displayUrl = (lowData && isVideo && item.thumbnail_url) ? item.thumbnail_url : item.media_url;
-        const dateStr = formatDate(item.created_at);
-        
         const card = document.createElement('div');
-        card.className = "bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mb-6"; 
         
-        // 1. HEADER
-        const headerHTML = `
-            <div class="p-4 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                        <i data-lucide="${isVideo ? 'video' : 'image'}" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-bold text-gray-900 dark:text-white leading-tight">${item.title}</h3>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">${dateStr}</p>
-                    </div>
-                </div>
-                <button onclick="openLightbox('${item.id}')" class="text-gray-400 hover:text-green-600 transition-colors">
-                    <i data-lucide="maximize-2" class="w-5 h-5"></i>
-                </button>
+        // Dynamic Spanning: Feature items span 2 columns
+        const spanClass = item.size === 'large' ? 'md:col-span-2' : 'md:col-span-1';
+        
+        card.className = `${spanClass} group relative h-80 md:h-96 rounded-3xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1`;
+        
+        card.onclick = () => openStaticLightbox(item);
+
+        card.innerHTML = `
+            <div class="absolute inset-0">
+                <img src="${item.image}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="${item.title}" loading="lazy">
             </div>
-        `;
+            
+            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300"></div>
 
-        // 2. MEDIA
-        let mediaHTML = '';
-        if (isVideo && !lowData) {
-            mediaHTML = `
-                <div class="relative w-full bg-black aspect-video cursor-pointer group" onclick="openLightbox('${item.id}')">
-                    <video src="${displayUrl}" class="w-full h-full object-contain" muted loop onmouseover="this.play()" onmouseout="this.pause()"></video>
-                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none group-hover:opacity-0 transition-opacity">
-                        <div class="w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center">
-                            <i data-lucide="play" class="w-6 h-6 text-white fill-white ml-1"></i>
-                        </div>
+            <div class="absolute inset-0 flex flex-col justify-end p-6 md:p-8">
+                <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                    <span class="inline-block px-3 py-1 mb-3 text-[10px] font-bold tracking-widest text-white uppercase bg-green-600 rounded-full shadow-sm">
+                        ${item.category}
+                    </span>
+                    <h3 class="text-2xl md:text-3xl font-bold text-white mb-2 font-jakarta leading-tight">
+                        ${item.title}
+                    </h3>
+                    <div class="h-0 group-hover:h-auto overflow-hidden transition-all duration-300 opacity-0 group-hover:opacity-100">
+                        <p class="text-gray-200 text-sm leading-relaxed mb-4 line-clamp-2">
+                            ${item.description}
+                        </p>
+                        <span class="inline-flex items-center text-green-300 text-xs font-bold uppercase tracking-wide group-hover:text-white transition-colors">
+                            Read Story <i data-lucide="arrow-right" class="w-4 h-4 ml-2"></i>
+                        </span>
                     </div>
-                </div>
-            `;
-        } else {
-            const poster = isVideo ? (item.thumbnail_url || getPlaceholderImage('400x300', 'Video')) : displayUrl;
-            mediaHTML = `
-                <div class="relative w-full cursor-pointer group" onclick="openLightbox('${item.id}')">
-                    <img src="${poster}" class="w-full h-auto max-h-[500px] object-cover bg-gray-100 dark:bg-gray-900" loading="lazy">
-                </div>`;
-        }
-
-        // 3. FOOTER
-        const footerHTML = `
-            <div class="p-4">
-                <p class="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mb-3">
-                    ${item.description || ''}
-                </p>
-                <div class="flex flex-wrap gap-2">
-                    ${(item.tags || []).map(t => `
-                        <span class="text-xs font-medium px-2.5 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg">#${t}</span>
-                    `).join('')}
                 </div>
             </div>
         `;
-
-        card.innerHTML = headerHTML + mediaHTML + footerHTML;
+        
         container.appendChild(card);
     });
     
     if(window.lucide) window.lucide.createIcons();
 };
 
-export const openLightbox = (itemId) => {
-    const item = state.gallery.find(i => i.id == itemId);
-    if(!item) return;
-
-    logUserActivity('view_gallery_item', `Opened ${item.media_type}: ${item.title}`);
+// 3. Simplified Lightbox for Static Data
+export const openStaticLightbox = (item) => {
+    logUserActivity('view_gallery_story', `Viewed story: ${item.title}`);
     const modal = document.getElementById('gallery-modal');
     const content = document.getElementById('gallery-modal-content');
     
-    let contentHTML = '';
-    if (item.media_type === 'video') {
-        contentHTML = `<video src="${item.media_url}" controls autoplay class="max-h-[80vh] w-full rounded-lg shadow-2xl bg-black"></video>`;
-    } else {
-        contentHTML = `<img src="${item.media_url}" class="max-h-[80vh] w-full object-contain rounded-lg shadow-2xl">`;
-    }
-
     content.innerHTML = `
-        ${contentHTML}
-        <div class="mt-4 text-left max-w-2xl mx-auto">
-            <h2 class="text-xl font-bold text-white">${item.title}</h2>
-            <p class="text-gray-300 text-sm mt-1">${item.description || ''}</p>
+        <div class="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden max-w-3xl w-full mx-auto shadow-2xl relative">
+            <div class="relative h-64 md:h-96">
+                <img src="${item.image}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-8">
+                    <div>
+                        <span class="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded-full mb-2 inline-block">${item.category}</span>
+                        <h2 class="text-3xl font-bold text-white font-jakarta">${item.title}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="p-8 text-left">
+                <p class="text-gray-700 dark:text-gray-300 text-lg leading-relaxed">
+                    ${item.description}
+                </p>
+                <div class="mt-6 pt-6 border-t border-gray-100 dark:border-gray-800">
+                    <p class="text-xs text-gray-400 font-bold uppercase tracking-wider">Initiative by BKBNC Green Club</p>
+                </div>
+            </div>
+            <button onclick="closeLightbox()" class="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
         </div>
     `;
 
     modal.classList.remove('hidden', 'opacity-0');
     modal.classList.add('flex', 'opacity-100');
+    if(window.lucide) window.lucide.createIcons();
 };
 
+// Re-use existing close logic or simplified
 export const closeLightbox = () => {
     const modal = document.getElementById('gallery-modal');
-    const content = document.getElementById('gallery-modal-content');
-    const video = content.querySelector('video');
-    if(video) video.pause();
-    
     modal.classList.add('hidden', 'opacity-0');
     modal.classList.remove('flex', 'opacity-100');
 };
 
-window.renderGalleryWrapper = renderGallery; // Explicitly Attach for utils.js
-window.openLightbox = openLightbox;
+// Expose to window
+window.renderGalleryWrapper = renderGallery;
 window.closeLightbox = closeLightbox;
