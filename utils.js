@@ -169,6 +169,14 @@ export const uploadToCloudinary = async (file) => {
 export const showPage = (pageId, addToHistory = true) => {
     logUserActivity('view_page', `Mapsd to ${pageId}`);
 
+    // 1. RESET BACKGROUND COLOR (Critical Fix for GreenLens)
+    // When leaving GreenLens, we must remove the specific background color
+    // so it doesn't persist on the Dashboard or other pages.
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.backgroundColor = ''; 
+    }
+
     els.pages.forEach(p => p.classList.remove('active'));
     
     const targetPage = document.getElementById(pageId);
@@ -224,7 +232,7 @@ export const showPage = (pageId, addToHistory = true) => {
         renderProfile(); 
     }
     else if (pageId === 'green-lens') { 
-        // Trigger Gallery Render
+        // Trigger Gallery Render via global wrapper from gallery.js
         window.renderGalleryWrapper && window.renderGalleryWrapper();
     }
     else if (pageId === 'plastic-log') {
