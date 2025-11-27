@@ -1,150 +1,176 @@
 import { state } from './state.js';
 import { logUserActivity, isLowDataMode } from './utils.js';
 
-// --- STATIC STORY DATA (Flagler-Inspired) ---
+// --- IMMERSIVE STORY CONFIGURATION ---
 const CAMPUS_STORIES = [
     {
-        id: 'story-1',
-        title: 'Where Nature Meets Innovation.',
-        category: 'The Solar Canopy',
-        description: 'Our B-Block roof has been transformed into a living power station. Generating 50kW of clean energy daily, this architectural marvel doesn’t just power our labs—it stands as a testament to our commitment to a carbon-neutral future.',
-        image: 'https://images.unsplash.com/photo-1497440001374-f26997328c1b?auto=format&fit=crop&w=1200&q=80', // Modern building/solar
-        // THEME: Deep Forest (Dark Green / White)
-        bgClass: 'bg-[#064e3b]', 
-        textClass: 'text-emerald-50',
-        accentClass: 'text-emerald-400',
-        layout: 'normal', // Image Right
-        imgShape: 'rounded-tl-[100px] rounded-br-[100px]' // Organic Leaf Shape
+        id: 'story-solar',
+        title: 'Powering the Future.',
+        subtitle: 'The Solar Canopy Initiative',
+        description: 'Our B-Block roof isn\'t just a shelter; it\'s a power station. Generating 50kW of clean energy daily, this architectural marvel powers our science labs and stands as a testament to our carbon-neutral goals.',
+        image: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1200&q=80', 
+        // THEME: Deep Forest (Dark Green & Crisp White)
+        bgClass: 'bg-[#1a2e05]', 
+        textClass: 'text-[#ecfccb]', // Lime-100
+        headingClass: 'text-white',
+        accentColor: 'bg-[#84cc16]', // Lime-500
+        layout: 'normal', 
+        imgShape: 'rounded-tr-[100px] rounded-bl-[100px]' // Leaf Shape
     },
     {
-        id: 'story-2',
-        title: 'Academics Done Differently.',
-        category: 'Native Botanical Garden',
-        description: 'Forget dull lectures. Our Botany students learn in the "Living Library"—a curated sanctuary of 200+ indigenous plant species. It’s not just a garden; it’s a classroom without walls where local biodiversity thrives.',
-        image: 'https://images.unsplash.com/photo-1623286908359-a73927f7b373?auto=format&fit=crop&w=1200&q=80', // Student in garden
-        // THEME: Solar Gold (Yellow / Dark)
-        bgClass: 'bg-[#fbbf24]', 
-        textClass: 'text-amber-950',
-        accentClass: 'text-amber-800',
-        layout: 'reverse', // Image Left
-        imgShape: 'rounded-t-full' // The "Arch" Window Look (Flagler Style)
+        id: 'story-garden',
+        title: 'A Library Without Walls.',
+        subtitle: 'Native Botanical Sanctuary',
+        description: 'Forget dull lectures. Our Botany students learn in the "Living Library"—a curated sanctuary of 200+ indigenous plant species. It is a classroom where local biodiversity thrives and students find focus.',
+        image: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1200&q=80',
+        // THEME: Warm Sandstone (Beige & Dark Earth)
+        bgClass: 'bg-[#fffbeb]', // Amber-50
+        textClass: 'text-[#78350f]', // Amber-900
+        headingClass: 'text-[#451a03]', // Amber-950
+        accentColor: 'bg-[#d97706]', // Amber-600
+        layout: 'reverse', 
+        imgShape: 'rounded-t-full' // The "Arch" Window (Flagler Style)
     },
     {
-        id: 'story-3',
-        title: 'A Future Free of Waste.',
-        category: 'Zero-Waste Cafeteria',
-        description: 'We are redefining consumption. From biodegradable sugarcane plates to our on-site bio-gas plant that turns leftovers into energy, every meal served here closes the loop on waste.',
-        image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80', // Recycling/Food
-        // THEME: Earthy Terracotta (Red/Brown / White)
-        bgClass: 'bg-[#9c4221]', 
-        textClass: 'text-orange-50',
-        accentClass: 'text-orange-200',
-        layout: 'normal', // Image Right
-        imgShape: 'rounded-xl rotate-2' // Slightly tilted polaroid style
+        id: 'story-waste',
+        title: 'Closing the Loop.',
+        subtitle: 'Zero-Waste Cafeteria',
+        description: 'We are redefining consumption. From biodegradable sugarcane plates to our on-site bio-gas plant that turns leftovers into energy, every meal served here is a step towards a landfill-free campus.',
+        image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80',
+        // THEME: Earthen Clay (Terracotta & Cream)
+        bgClass: 'bg-[#7c2d12]', // Orange-900
+        textClass: 'text-[#ffedd5]', // Orange-100
+        headingClass: 'text-white',
+        accentColor: 'bg-[#fdba74]', // Orange-300
+        layout: 'normal', 
+        imgShape: 'rounded-[3rem]' // Soft Rect
     },
     {
-        id: 'story-4',
-        title: 'Leading the Blue Wave.',
-        category: 'Water Conservation',
+        id: 'story-water',
+        title: 'Every Drop Counts.',
+        subtitle: 'Smart Water Conservation',
         description: 'Our rainwater harvesting systems collect over 100,000 liters annually, recharging the campus groundwater tables. We don’t just use water; we respect it, protect it, and replenish it.',
-        image: 'https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1200&q=80', // Water/Science
-        // THEME: Ocean Depth (Deep Blue / White)
-        bgClass: 'bg-[#1e3a8a]', 
-        textClass: 'text-blue-50',
-        accentClass: 'text-blue-300',
-        layout: 'reverse', // Image Left
-        imgShape: 'rounded-full aspect-square object-cover' // Porthole / Circle look
+        image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
+        // THEME: Deep Ocean (Navy & Cyan)
+        bgClass: 'bg-[#083344]', // Cyan-950
+        textClass: 'text-[#cffafe]', // Cyan-100
+        headingClass: 'text-white',
+        accentColor: 'bg-[#06b6d4]', // Cyan-500
+        layout: 'reverse', 
+        imgShape: 'rounded-full aspect-square object-cover shadow-[0_0_60px_-15px_rgba(6,182,212,0.3)]' // Planet/Porthole
     }
 ];
 
 // 1. Load Data
 export const loadGalleryData = async () => {
     state.gallery = CAMPUS_STORIES;
+    // Only render if user is on this page to avoid heavy DOM ops in background
     if (document.getElementById('green-lens').classList.contains('active')) {
         renderGallery();
     }
 };
 
-// 2. Render (Immersive Single Page View)
+// 2. Render (Scrollytelling Single Page View)
 export const renderGallery = () => {
     const container = document.getElementById('gallery-feed');
     if (!container) return;
     
     container.innerHTML = '';
     
-    // Add a "Hero" Header inside the feed
+    // --- HERO SECTION ---
     const hero = document.createElement('div');
-    hero.className = "py-20 px-6 text-center bg-white dark:bg-gray-900";
+    hero.className = "min-h-[70vh] flex flex-col items-center justify-center text-center px-6 bg-white dark:bg-gray-950 sticky top-0 z-0";
+    hero.style.marginBottom = "-20vh"; // Overlap effect
     hero.innerHTML = `
-        <span class="text-green-600 font-bold tracking-[0.3em] uppercase text-xs mb-4 block">The GreenLens Project</span>
-        <h1 class="text-5xl md:text-7xl font-black text-gray-900 dark:text-white tracking-tight font-jakarta mb-6">
-            Our Campus.<br>Reimagined.
-        </h1>
-        <div class="w-20 h-1 bg-green-500 mx-auto rounded-full"></div>
+        <div class="animate-slideUp">
+            <span class="inline-block px-4 py-1.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-xs font-bold tracking-widest uppercase mb-6">
+                The GreenLens Project
+            </span>
+            <h1 class="text-6xl md:text-8xl font-black text-gray-900 dark:text-white tracking-tighter font-jakarta leading-[0.9] mb-8">
+                Campus.<br>Reimagined.
+            </h1>
+            <p class="text-lg text-gray-500 max-w-lg mx-auto mb-10">
+                Scroll to explore the initiatives that define our commitment to a sustainable future.
+            </p>
+            <div class="animate-bounce text-gray-400">
+                <i data-lucide="arrow-down" class="w-8 h-8"></i>
+            </div>
+        </div>
     `;
     container.appendChild(hero);
 
     const isLowData = isLowDataMode();
 
+    // --- STORY SECTIONS ---
     state.gallery.forEach((item, index) => {
         const section = document.createElement('section');
         
-        // Layout Logic: Alternating Row Direction
+        // Layout Logic: "min-h-screen" ensures the color fills the view
         const flexDirection = item.layout === 'reverse' ? 'lg:flex-row-reverse' : 'lg:flex-row';
         
-        // Base Classes for full width section
-        section.className = `w-full py-20 lg:py-32 px-6 lg:px-20 flex flex-col ${flexDirection} items-center gap-12 lg:gap-24 ${item.bgClass} transition-colors duration-500 overflow-hidden relative`;
+        // Note: 'sticky' and 'z-index' creates a stacking card effect as you scroll
+        section.className = `min-h-screen w-full flex flex-col ${flexDirection} items-center justify-center gap-12 lg:gap-24 px-6 lg:px-24 py-20 ${item.bgClass} relative z-10`;
 
-        // Visual Content (Image)
-        const mediaHTML = `
-            <div class="w-full lg:w-1/2 relative z-10">
-                <div class="relative w-full aspect-[4/5] lg:aspect-square shadow-2xl ${item.imgShape} overflow-hidden transform hover:scale-[1.02] transition-transform duration-700 ease-out">
-                    <img src="${item.image}" class="w-full h-full object-cover" loading="lazy" alt="${item.category}">
-                    ${!isLowData ? '<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>' : ''}
+        // Image Column
+        const imgHTML = `
+            <div class="w-full lg:w-1/2 flex justify-center items-center">
+                <div class="relative w-full max-w-lg aspect-[4/5] ${item.imgShape} overflow-hidden shadow-2xl transform hover:scale-[1.02] transition-transform duration-700 ease-out group">
+                    <img src="${item.image}" class="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-1000" loading="lazy" alt="${item.title}">
+                    
+                    ${!isLowData ? `
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    ` : ''}
                 </div>
             </div>
         `;
 
-        // Text Content
+        // Text Column
         const textHTML = `
-            <div class="w-full lg:w-1/2 relative z-10 text-center lg:text-left">
-                <span class="inline-block py-1 mb-4 text-xs font-bold tracking-[0.2em] uppercase border-b-2 border-current ${item.accentClass} opacity-80">
-                    ${item.category}
-                </span>
-                <h2 class="text-4xl md:text-6xl font-black mb-6 font-jakarta leading-[1.1] ${item.textClass}">
+            <div class="w-full lg:w-1/2 text-center lg:text-left">
+                <div class="flex items-center justify-center lg:justify-start gap-3 mb-6">
+                    <span class="h-0.5 w-12 ${item.accentColor}"></span>
+                    <span class="text-xs font-bold tracking-[0.2em] uppercase ${item.textClass} opacity-90">${item.subtitle}</span>
+                </div>
+                
+                <h2 class="text-5xl md:text-7xl font-black font-jakarta leading-tight mb-8 ${item.headingClass}">
                     ${item.title}
                 </h2>
-                <p class="text-lg md:text-xl leading-relaxed opacity-90 ${item.textClass} font-medium max-w-xl mx-auto lg:mx-0">
+                
+                <p class="text-lg md:text-xl leading-relaxed ${item.textClass} opacity-90 max-w-xl mx-auto lg:mx-0 font-medium">
                     ${item.description}
                 </p>
             </div>
         `;
 
-        // Background Decor (Subtle huge text or shapes behind)
+        // Background Number (Decor)
         const decorHTML = `
-            <div class="absolute -bottom-20 -right-20 text-[20rem] font-black opacity-5 select-none pointer-events-none mix-blend-overlay ${item.textClass}">
-                ${index + 1}
+            <div class="absolute top-10 left-10 md:left-20 text-[12rem] font-black opacity-5 select-none pointer-events-none mix-blend-overlay text-white leading-none font-jakarta">
+                0${index + 1}
             </div>
         `;
 
-        section.innerHTML = mediaHTML + textHTML + decorHTML;
+        section.innerHTML = imgHTML + textHTML + decorHTML;
         container.appendChild(section);
     });
     
-    // Footer Message
-    const footer = document.createElement('div');
-    footer.className = "py-24 bg-gray-900 text-center text-white";
+    // --- FOOTER CALL TO ACTION ---
+    const footer = document.createElement('section');
+    footer.className = "min-h-[50vh] bg-white dark:bg-black flex flex-col items-center justify-center text-center px-6 relative z-20";
     footer.innerHTML = `
-        <h3 class="text-3xl font-bold mb-6">Be Part of the Story.</h3>
-        <button onclick="showPage('challenges')" class="px-8 py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-full transition-all transform hover:scale-105 shadow-lg shadow-green-500/30">
-            Join a Challenge
+        <h3 class="text-4xl font-bold text-gray-900 dark:text-white mb-6">Be Part of the Story.</h3>
+        <p class="text-gray-500 mb-8 max-w-md">Your actions contribute to the next chapter of our Green Campus.</p>
+        <button onclick="showPage('challenges')" class="group relative px-8 py-4 bg-green-600 text-white font-bold rounded-full overflow-hidden shadow-lg hover:shadow-green-500/50 transition-all">
+            <span class="relative z-10 flex items-center gap-2">
+                Start a Challenge <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
+            </span>
+            <div class="absolute inset-0 bg-green-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300"></div>
         </button>
     `;
     container.appendChild(footer);
 
-    // Log view
-    logUserActivity('view_greenlens_feed', 'User scrolled through GreenLens stories');
+    logUserActivity('view_greenlens_feed', 'User entered immersive gallery');
+    if(window.lucide) window.lucide.createIcons();
 };
 
-// Expose to window
+// Expose to window for Utils
 window.renderGalleryWrapper = renderGallery;
