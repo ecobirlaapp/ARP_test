@@ -53,6 +53,7 @@
             const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
             if (conn && (conn.saveData === true || ['slow-2g', '2g', '3g'].includes(conn.effectiveType))) {
                 document.body.classList.add('low-data-mode');
+                console.log('EcoCampus: Low Data Mode Active');
             }
         })();
     </script>
@@ -176,14 +177,14 @@
                     </div>
                 </div>
 
-               <div id="green-lens" class="page p-0 w-full bg-white dark:bg-gray-900 min-h-full">
-    <div id="gallery-feed" class="w-full">
-        <div class="h-screen flex flex-col items-center justify-center text-gray-400">
-            <div class="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full mb-4"></div>
-            <p>Curating stories...</p>
-        </div>
-    </div>
-</div>
+                <div id="green-lens" class="page p-0 w-full min-h-full">
+                    <div id="gallery-feed" class="w-full">
+                        <div class="h-screen flex flex-col items-center justify-center text-gray-400">
+                            <div class="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full mb-4"></div>
+                            <p>Curating stories...</p>
+                        </div>
+                    </div>
+                </div>
 
                 <div id="plastic-log" class="page p-6">
                     <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Plastic Log</h2>
