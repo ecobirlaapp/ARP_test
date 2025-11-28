@@ -58,7 +58,7 @@ const CAMPUS_STORIES = [
         id: 'story-water',
         title: 'Every Drop Counts.',
         subtitle: 'Smart Water Conservation',
-        [cite_start]description: 'Our scientifically designed rainwater harvesting pits recharge groundwater [cite: 167][cite_start], while our STP ensures treated water is reused for gardening[cite: 136]. [cite_start]Over 4,200 students actively track their water footprint using the "Why Waste" App[cite: 173].',
+        description: 'Our scientifically designed rainwater harvesting pits recharge groundwater [cite: 167][cite_start], while our STP ensures treated water is reused for gardening[cite: 136]. [cite_start]Over 4,200 students actively track their water footprint using the "Why Waste" App[cite: 173].',
         image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
         // THEME: Deep Ocean (Cyan/Navy)
         bgHex: '#083344',
