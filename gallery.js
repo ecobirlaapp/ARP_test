@@ -1,25 +1,22 @@
 import { state } from './state.js';
 import { logUserActivity, isLowDataMode } from './utils.js';
 
-// --- B. K. BIRLA COLLEGE REPORT DATA (FROM PDF) ---
+// --- B. K. BIRLA COLLEGE REPORT DATA ---
 const CAMPUS_STORIES = [
     {
         id: 'story-hero',
         isHero: true,
-        // FIX: Added dark mode background hex to prevent white-on-white text
         bgHex: '#ffffff', 
-        darkBgHex: '#111827', // Dark gray for dark mode
+        darkBgHex: '#111827', 
         isDark: false 
     },
     {
         id: 'story-green-cover',
         title: 'A Living Laboratory.',
         subtitle: 'Green Campus & Biodiversity',
-        [cite_start]// Data from PDF: 49.53% green cover, 550+ trees, 1600+ plants [cite: 3, 4]
-        description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city’s green lung.',
+        description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city\'s green lung.',
         image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80', 
-        // THEME: Deep Forest (Nature)
-        bgHex: '#064e3b', // Emerald-950
+        bgHex: '#064e3b', 
         isDark: true,
         textClass: 'text-emerald-50',
         headingClass: 'text-white',
@@ -31,27 +28,23 @@ const CAMPUS_STORIES = [
         id: 'story-water',
         title: 'Every Drop Counts.',
         subtitle: 'Water Conservation',
-        [cite_start]// Data from PDF: Rainwater harvesting, STP/ETP, 4200+ students on Why Waste App [cite: 8, 10, 11]
         description: 'Our scientifically designed rainwater harvesting pits recharge groundwater, while our STP & ETP systems ensure treated water is reused. Over 4200 students actively track their water footprint using the "Why Waste" App.',
         image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
-        // THEME: Deep Ocean (Water)
-        bgHex: '#083344', // Cyan-950
+        bgHex: '#083344', 
         isDark: true,
         textClass: 'text-cyan-50', 
         headingClass: 'text-white', 
         accentColor: 'bg-cyan-400', 
         layout: 'reverse', 
-        imgShape: 'rounded-full aspect-square object-cover shadow-[0_0_60px_-15px_rgba(6,182,212,0.3)]' 
+        imgShape: 'rounded-full aspect-square object-cover shadow-2xl' 
     },
     {
         id: 'story-energy',
         title: 'Powered by Nature.',
         subtitle: 'Renewable Energy',
-        [cite_start]// Data from PDF: Solar powering 50%, 100% LED, Sensor automation [cite: 13, 14, 15]
         description: 'We have transitioned to a cleaner future. Our solar power plants now fulfill 50% of the campus energy needs. Combined with 100% LED lighting, BLDC fans, and sensor-based automation, we are minimizing our carbon footprint.',
         image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80', 
-        // THEME: Solar Gold (Energy)
-        bgHex: '#422006', // Dark Bronze
+        bgHex: '#422006', 
         isDark: true,
         textClass: 'text-yellow-50', 
         headingClass: 'text-white',
@@ -63,27 +56,23 @@ const CAMPUS_STORIES = [
         id: 'story-waste',
         title: 'Zero Waste Mission.',
         subtitle: 'Waste Management',
-        [cite_start]// Data from PDF: Biogas, PadCare, 200kg e-waste [cite: 18, 19, 20]
         description: 'Our "Zero Waste" policy is in full effect. We convert organic waste into biogas, recycle sanitary waste via PadCare, and have responsibly recycled over 200 kg of e-waste. Colour-coded bins ensure strict segregation at the source.',
         image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80', 
-        // THEME: Terracotta (Earth/Waste)
-        bgHex: '#7c2d12', // Orange-900
+        bgHex: '#7c2d12', 
         isDark: true,
         textClass: 'text-orange-50',
         headingClass: 'text-white',
         accentColor: 'bg-orange-400',
         layout: 'reverse', 
-        imgShape: 'rounded-[3rem] rotate-1' 
+        imgShape: 'rounded-[3rem]' 
     },
     {
         id: 'story-community',
         title: 'Community Impact.',
         subtitle: 'Social Responsibility',
-        [cite_start]// Data from PDF: 500+ saplings distributed, rural water monitoring [cite: 31, 32]
         description: 'Our impact goes beyond the campus walls. We have distributed over 500 saplings to the community and actively monitor water quality in rural villages, ensuring clean and safe drinking water for all.',
-        image: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=1200&q=80', // Community
-        // THEME: Slate Tech (Modern)
-        bgHex: '#0f172a', // Slate-900
+        image: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=1200&q=80', 
+        bgHex: '#0f172a', 
         isDark: true,
         textClass: 'text-slate-200',
         headingClass: 'text-white',
@@ -118,10 +107,10 @@ export const renderGallery = () => {
         
         if (item.isHero) {
             // HERO SECTION
-            // FIX: Added dark mode background classes to container
-            section.className = "gallery-section pt-20 pb-32 px-6 text-center relative z-10 bg-white dark:bg-gray-950";
+            section.className = "gallery-section pt-20 pb-32 px-6 text-center relative z-10";
             section.setAttribute('data-bg', item.bgHex);
-            section.setAttribute('data-bg-dark', item.darkBgHex); // Used by observer
+            // Used for Dark Mode Text Visibility Fix
+            section.setAttribute('data-bg-dark', item.darkBgHex); 
             
             section.innerHTML = `
                 <div class="animate-slideUp max-w-4xl mx-auto">
@@ -146,7 +135,6 @@ export const renderGallery = () => {
             section.className = `gallery-section min-h-screen w-full flex flex-col ${flexDirection} items-center justify-center gap-12 lg:gap-24 px-6 lg:px-24 py-20 relative z-10`;
             
             section.setAttribute('data-bg', item.bgHex);
-            // For story sections, the dark bg is the same as the colored bg (immersive)
             section.setAttribute('data-bg-dark', item.bgHex); 
 
             const imgHTML = `
@@ -217,7 +205,7 @@ const setupScrollObserver = () => {
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                // FIX: Check for Dark Mode specific BG color
+                // Check for Dark Mode specific BG color
                 const bg = document.documentElement.classList.contains('dark') 
                     ? (entry.target.getAttribute('data-bg-dark') || entry.target.getAttribute('data-bg'))
                     : entry.target.getAttribute('data-bg');
