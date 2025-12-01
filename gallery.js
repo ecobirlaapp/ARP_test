@@ -16,7 +16,7 @@ const CAMPUS_STORIES = [
         title: 'A Living Laboratory.',
         subtitle: 'Green Campus & Biodiversity',
         description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city’s green lung.',
-        image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80', 
+        image: 'https://i.ibb.co/Y4cgngks/IMG-2127-1.jpg', 
         // THEME: Deep Forest (Nature)
         bgHex: '#064e3b', // Emerald-950
         isDark: true,
@@ -46,7 +46,7 @@ const CAMPUS_STORIES = [
         title: 'Powered by Nature.',
         subtitle: 'Renewable Energy',
         description: 'We have transitioned to a cleaner future. Our solar power plants now fulfill 50% of the campus energy needs. Combined with 100% LED lighting, BLDC fans, and sensor-based automation, we are minimizing our carbon footprint.',
-        image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80', 
+        image: 'https://i.ibb.co/1Gtnhz7w/IMG-2158-1.jpg', 
         // THEME: Solar Gold (Energy)
         bgHex: '#422006', // Dark Bronze
         isDark: true,
