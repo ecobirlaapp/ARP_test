@@ -17,10 +17,10 @@ const CAMPUS_STORIES = [
   subtitle: "Heritage & Values",
   description:
     "The sustainable journey of B. K. Birla College is deeply rooted in the values and philosophy of Shri Basant Kumar Birla. His belief in holistic education, social responsibility, and harmony with nature continues to inspire every initiative on campus. This commemorative space stands as a reminder that progress must coexist with sustainability, compassion, and humanity.",
-  imgSrc: "https://i.ibb.co/vvCZM79R/DSC-4208-1.jpg", // <-- use your image path
+  image: "https://i.ibb.co/vvCZM79R/DSC-4208-1.jpg", // <-- use your image path
   bghex: "#004d29",
-  icon: "mdi:tree",
-  textcolors: "text-emerald-50",
+  isDark: true,
+  textclass: "text-emerald-50",
   headingClass: "text-white",
   accentcolors: "text-emerald-500",
   layout: "normal",
