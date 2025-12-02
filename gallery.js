@@ -47,7 +47,7 @@ const CAMPUS_STORIES = [
         title: 'Every Drop Counts.',
         subtitle: 'Water Conservation',
         description: 'Our scientifically designed rainwater harvesting pits recharge groundwater, while our 300 KLD STP ensures treated water is reused. Over 4200 students actively track their water footprint using the "Why Waste" App.',
-        image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
+        image: 'https://i.ibb.co/jPfb681z/frame-0-50-14f.jpg',
         // THEME: Deep Ocean (Water)
         bgHex: '#083344', // Cyan-950
         isDark: true,
