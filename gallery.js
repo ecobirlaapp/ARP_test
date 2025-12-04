@@ -7,34 +7,17 @@ const CAMPUS_STORIES = [
     {
         id: 'story-hero',
         isHero: true,
-        bgHex: '#ffffff', // Clean white entry
-        darkBgHex: '#111827', // Dark gray for dark mode
+        bgHex: '#ffffff', 
+        darkBgHex: '#111827', 
         isDark: false 
     },
-   {
-  id: "story-founder",
-  title: "A Tribute to Our Founder’s Vision",
-  subtitle: "Heritage & Values",
-  description:
-    "The sustainable journey of B. K. Birla College is deeply rooted in the values and philosophy of Shri Basant Kumar Birla. His belief in holistic education, social responsibility, and harmony with nature continues to inspire every initiative on campus. This commemorative space stands as a reminder that progress must coexist with sustainability, compassion, and humanity.",
-  image: "https://i.ibb.co/vvCZM79R/DSC-4208-1.jpg", // <-- use your image path
-  bghex: "#004d29",
-  isDark: true,
-  textclass: "text-emerald-50",
-  headingClass: "text-white",
-  accentcolors: "text-emerald-500",
-  layout: "normal",
-  imgShape: "rounded-tr-[100px] rounded-bl-[100px]",
-},
-
     {
         id: 'story-green-cover',
-        title: 'Green Lush Campus.',
+        title: 'A Living Laboratory.',
         subtitle: 'Green Campus & Biodiversity',
         description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city’s green lung.',
-        image: 'https://i.ibb.co/yc9mgZqy/DSC-4203-1.jpg', 
-        // THEME: Deep Forest (Nature)
-        bgHex: '#064e3b', // Emerald-950
+        image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80', 
+        bgHex: '#064e3b', 
         isDark: true,
         textClass: 'text-emerald-50',
         headingClass: 'text-white',
@@ -46,10 +29,9 @@ const CAMPUS_STORIES = [
         id: 'story-water',
         title: 'Every Drop Counts.',
         subtitle: 'Water Conservation',
-        description: 'Our scientifically designed rainwater harvesting pits recharge groundwater, while our 300 KLD STP ensures treated water is reused. Over 4200 students actively track their water footprint using the "Why Waste" App.',
-        image: 'https://i.ibb.co/jPfb681z/frame-0-50-14f.jpg',
-        // THEME: Deep Ocean (Water)
-        bgHex: '#083344', // Cyan-950
+        description: 'Our scientifically designed rainwater harvesting pits recharge groundwater, while our STP & ETP systems ensure treated water is reused. Over 4200 students actively track their water footprint using the "Why Waste" App.',
+        image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
+        bgHex: '#083344', 
         isDark: true,
         textClass: 'text-cyan-50', 
         headingClass: 'text-white', 
@@ -62,9 +44,8 @@ const CAMPUS_STORIES = [
         title: 'Powered by Nature.',
         subtitle: 'Renewable Energy',
         description: 'We have transitioned to a cleaner future. Our solar power plants now fulfill 50% of the campus energy needs. Combined with 100% LED lighting, BLDC fans, and sensor-based automation, we are minimizing our carbon footprint.',
-        image: 'https://i.ibb.co/1Gtnhz7w/IMG-2158-1.jpg', 
-        // THEME: Solar Gold (Energy)
-        bgHex: '#422006', // Dark Bronze
+        image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80', 
+        bgHex: '#422006', 
         isDark: true,
         textClass: 'text-yellow-50', 
         headingClass: 'text-white',
@@ -76,10 +57,9 @@ const CAMPUS_STORIES = [
         id: 'story-waste',
         title: 'Zero Waste Mission.',
         subtitle: 'Waste Management',
-        description: 'Our "Zero Waste" policy is in full effect. We convert organic waste into biogas (6500L digester), recycle sanitary waste via PadCare, and have responsibly recycled over 200 kg of e-waste. Colour-coded bins ensure strict segregation.',
+        description: 'Our "Zero Waste" policy is in full effect. We convert organic waste into biogas, recycle sanitary waste via PadCare, and have responsibly recycled over 200 kg of e-waste. Colour-coded bins ensure strict segregation at the source.',
         image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1200&q=80', 
-        // THEME: Terracotta (Earth/Waste)
-        bgHex: '#7c2d12', // Orange-900
+        bgHex: '#7c2d12', 
         isDark: true,
         textClass: 'text-orange-50',
         headingClass: 'text-white',
@@ -92,39 +72,8 @@ const CAMPUS_STORIES = [
         title: 'Paperless & Smart.',
         subtitle: 'Digital Transformation',
         description: 'We are saving trees through technology. With Microsoft ERP for attendance and cloud storage for notes, we have drastically reduced paper use. Since 2018, we have also responsibly recycled over 202 kg of e-waste.',
-        image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
-        // THEME: Tech Slate (Dark Blue/Grey)
-        bgHex: '#0f172a',
-        isDark: true,
-        textClass: 'text-slate-200',
-        headingClass: 'text-white',
-        accentColor: 'bg-indigo-500',
-        layout: 'normal', 
-        imgShape: 'rounded-xl' 
-    },
-    {
-        id: 'story-mobility',
-        title: 'Moving Responsibly.',
-        subtitle: 'Green Mobility',
-        description: 'We encourage a lower carbon footprint through "No-Vehicle Days" and a dedicated bicycle system for campus movement. Our pedestrian-friendly pathways ensure that walking is always the best option.',
-        image: 'https://images.unsplash.com/photo-1558522669-8dd3362fa64e?auto=format&fit=crop&w=1200&q=80', // Bicycle image
-        // THEME: Urban Asphalt (Cool Gray)
-        bgHex: '#374151',
-        isDark: true,
-        textClass: 'text-gray-100',
-        headingClass: 'text-white',
-        accentColor: 'bg-teal-400',
-        layout: 'reverse', 
-        imgShape: 'rounded-full border-4 border-gray-600' 
-    },
-    {
-        id: 'story-community',
-        title: 'Community Impact.',
-        subtitle: 'Social Responsibility',
-        description: 'Our impact goes beyond the campus walls. We have distributed over 500 saplings to the community and actively monitor water quality in rural villages, ensuring clean and safe drinking water for all.',
-        image: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=1200&q=80', // Community
-        // THEME: Slate Tech (Modern)
-        bgHex: '#0f172a', // Slate-900
+        image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80', 
+        bgHex: '#0f172a', 
         isDark: true,
         textClass: 'text-slate-200',
         headingClass: 'text-white',
@@ -187,7 +136,7 @@ export const renderGallery = () => {
             section.className = `gallery-section min-h-screen w-full flex flex-col ${flexDirection} items-center justify-center gap-12 lg:gap-24 px-6 lg:px-24 py-20 relative z-10`;
             
             section.setAttribute('data-bg', item.bgHex);
-            section.setAttribute('data-bg-dark', item.bgHex); // In immersive mode, dark mode uses the same color
+            section.setAttribute('data-bg-dark', item.bgHex); 
 
             const imgHTML = `
                 <div class="w-full lg:w-1/2 flex justify-center items-center relative z-10">
