@@ -32,7 +32,7 @@ const CAMPUS_STORIES = [
         title: 'Green Lush Campus',
         subtitle: 'Green Campus & Biodiversity',
         description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city’s green lung.',
-        image: 'https://www.collegebatch.com/static/clg-gallery/b-k-birla-college-of-arts-science-commerce-thane-329147.jpg', 
+        image: 'https://i.ibb.co/CpVL925x/image.png', 
         // THEME: Deep Forest (Nature)
         bgHex: '#064e3b', // Emerald-950
         isDark: true,
@@ -89,9 +89,9 @@ const CAMPUS_STORIES = [
     },
     {
         id: 'story-community',
-        title: 'Community Impact.',
-        subtitle: 'Social Responsibility',
-        description: 'Our impact goes beyond the campus walls. We have distributed over 500 saplings to the community and actively monitor water quality in rural villages, ensuring clean and safe drinking water for all.',
+        title: 'Paperless & Smart.',
+        subtitle: 'Digital Transformation',
+        description: 'We are saving trees through technology. With Microsoft ERP for attendance and cloud storage for notes, we have drastically reduced paper use. Since 2018, we have also responsibly recycled over 202 kg of e-waste.',
         image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80', 
         // THEME: Slate Tech (Modern)
         bgHex: '#0f172a', // Slate-900
