@@ -29,10 +29,10 @@ const CAMPUS_STORIES = [
     },
     {
         id: 'story-green-cover',
-        title: 'A Living Laboratory.',
+        title: 'Green Lush Campus',
         subtitle: 'Green Campus & Biodiversity',
         description: 'Spanning 20 acres, our campus maintains a 49.53% green cover. With over 550 trees, 1600+ potted plants, and a dedicated Biodiversity Park, we have created a thriving ecosystem that acts as the city’s green lung.',
-        image: 'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=1200&q=80', 
+        image: 'https://www.collegebatch.com/static/clg-gallery/b-k-birla-college-of-arts-science-commerce-thane-329147.jpg', 
         // THEME: Deep Forest (Nature)
         bgHex: '#064e3b', // Emerald-950
         isDark: true,
@@ -47,7 +47,7 @@ const CAMPUS_STORIES = [
         title: 'Every Drop Counts.',
         subtitle: 'Water Conservation',
         description: 'Our scientifically designed rainwater harvesting pits recharge groundwater, while our STP & ETP systems ensure treated water is reused. Over 4200 students actively track their water footprint using the "Why Waste" App.',
-        image: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&w=1200&q=80',
+        image: 'https://i.ibb.co/jPfb681z/frame-0-50-14f.jpg',
         // THEME: Deep Ocean (Water)
         bgHex: '#083344', // Cyan-950
         isDark: true,
@@ -62,7 +62,7 @@ const CAMPUS_STORIES = [
         title: 'Powered by Nature.',
         subtitle: 'Renewable Energy',
         description: 'We have transitioned to a cleaner future. Our solar power plants now fulfill 50% of the campus energy needs. Combined with 100% LED lighting, BLDC fans, and sensor-based automation, we are minimizing our carbon footprint.',
-        image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80', 
+        image: 'https://i.ibb.co/1Gtnhz7w/IMG-2158-1.jpg', 
         // THEME: Solar Gold (Energy)
         bgHex: '#422006', // Dark Bronze
         isDark: true,
@@ -92,7 +92,7 @@ const CAMPUS_STORIES = [
         title: 'Community Impact.',
         subtitle: 'Social Responsibility',
         description: 'Our impact goes beyond the campus walls. We have distributed over 500 saplings to the community and actively monitor water quality in rural villages, ensuring clean and safe drinking water for all.',
-        image: 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=1200&q=80', 
+        image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80', 
         // THEME: Slate Tech (Modern)
         bgHex: '#0f172a', // Slate-900
         isDark: true,
